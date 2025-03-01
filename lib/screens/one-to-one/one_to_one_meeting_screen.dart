@@ -166,6 +166,7 @@ class _OneToOneMeetingScreenState extends State<OneToOneMeetingScreen> {
                                       : CrossFadeState.showSecond,
                                   secondChild: const SizedBox.shrink(),
                                   firstChild: MeetingActionBar(
+                                    meeting: meeting, // Added meeting argument
                                     isMicEnabled: audioStream != null,
                                     isCamEnabled: videoStream != null,
                                     isScreenShareEnabled: shareStream != null,
@@ -174,7 +175,6 @@ class _OneToOneMeetingScreenState extends State<OneToOneMeetingScreen> {
                                     onCallEndButtonPressed: () {
                                       meeting.end();
                                     },
-
                                     onCallLeaveButtonPressed: () {
                                       meeting.leave();
                                     },
@@ -194,31 +194,27 @@ class _OneToOneMeetingScreenState extends State<OneToOneMeetingScreen> {
                                         meeting.enableCam();
                                       }
                                     },
-
                                     onSwitchMicButtonPressed: (details) async {
-                                      List<AudioDeviceInfo>? outputDevice =
-                                          await VideoSDK.getAudioDevices();
-                                      double bottomMargin =
-                                          (70.0 * outputDevice!.length);
-                                      final screenSize =
-                                          MediaQuery.of(context).size;
+                                      List<AudioDeviceInfo>? outputDevice = await VideoSDK.getAudioDevices();
+                                      double bottomMargin = (70.0 * outputDevice!.length);
+                                      final screenSize = MediaQuery.of(context).size;
                                       await showMenu(
                                         context: context,
                                         color: black700,
                                         shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(12)),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
                                         position: RelativeRect.fromLTRB(
-                                          screenSize.width -
-                                              details.globalPosition.dx,
-                                          details.globalPosition.dy -
-                                              bottomMargin,
+                                          screenSize.width - details.globalPosition.dx,
+                                          details.globalPosition.dy - bottomMargin,
                                           details.globalPosition.dx,
-                                          (bottomMargin),
+                                          bottomMargin,
                                         ),
                                         items: outputDevice.map((e) {
                                           return PopupMenuItem(
-                                              value: e, child: Text(e.label));
+                                            value: e,
+                                            child: Text(e.label),
+                                          );
                                         }).toList(),
                                         elevation: 8.0,
                                       ).then((value) {
@@ -227,7 +223,6 @@ class _OneToOneMeetingScreenState extends State<OneToOneMeetingScreen> {
                                         }
                                       });
                                     },
-
                                     onChatButtonPressed: () {
                                       setState(() {
                                         showChatSnackbar = false;
@@ -235,27 +230,23 @@ class _OneToOneMeetingScreenState extends State<OneToOneMeetingScreen> {
                                       showModalBottomSheet(
                                         context: context,
                                         constraints: BoxConstraints(
-                                            maxHeight: MediaQuery.of(context)
-                                                    .size
-                                                    .height -
-                                                statusbarHeight),
+                                          maxHeight: MediaQuery.of(context).size.height - statusbarHeight,
+                                        ),
                                         isScrollControlled: true,
                                         builder: (context) => ChatView(
-                                            key: const Key("ChatScreen"),
-                                            meeting: meeting),
-                                      ).whenComplete(() => {
-                                            setState(() {
-                                              showChatSnackbar = true;
-                                            })
-                                          });
+                                          key: const Key("ChatScreen"),
+                                          meeting: meeting,
+                                        ),
+                                      ).whenComplete(() {
+                                        setState(() {
+                                          showChatSnackbar = true;
+                                        });
+                                      });
                                     },
-
                                     // Called when more options button is pressed
                                     onMoreOptionSelected: (option) {
-                                      // Showing more options dialog box
                                       if (option == "screenshare") {
-                                        if (remoteParticipantShareStream ==
-                                            null) {
+                                        if (remoteParticipantShareStream == null) {
                                           if (shareStream == null) {
                                             meeting.enableScreenShare();
                                           } else {
@@ -263,42 +254,36 @@ class _OneToOneMeetingScreenState extends State<OneToOneMeetingScreen> {
                                           }
                                         } else {
                                           showSnackBarMessage(
-                                              message:
-                                                  "Someone is already presenting",
-                                              context: context);
+                                            message: "Someone is already presenting",
+                                            context: context,
+                                          );
                                         }
                                       } else if (option == "recording") {
-                                        if (recordingState ==
-                                            "RECORDING_STOPPING") {
+                                        if (recordingState == "RECORDING_STOPPING") {
                                           showSnackBarMessage(
-                                              message:
-                                                  "Recording is in stopping state",
-                                              context: context);
-                                        } else if (recordingState ==
-                                            "RECORDING_STARTED") {
+                                            message: "Recording is in stopping state",
+                                            context: context,
+                                          );
+                                        } else if (recordingState == "RECORDING_STARTED") {
                                           meeting.stopRecording();
-                                        } else if (recordingState ==
-                                            "RECORDING_STARTING") {
+                                        } else if (recordingState == "RECORDING_STARTING") {
                                           showSnackBarMessage(
-                                              message:
-                                                  "Recording is in starting state",
-                                              context: context);
+                                            message: "Recording is in starting state",
+                                            context: context,
+                                          );
                                         } else {
                                           meeting.startRecording();
                                         }
                                       } else if (option == "participants") {
                                         showModalBottomSheet(
                                           context: context,
-                                          // constraints: BoxConstraints(
-                                          //     maxHeight: MediaQuery.of(context).size.height -
-                                          //         statusbarHeight),
                                           isScrollControlled: false,
-                                          builder: (context) =>
-                                              ParticipantList(meeting: meeting),
+                                          builder: (context) => ParticipantList(meeting: meeting),
                                         );
                                       }
                                     },
                                   ),
+
                                 ),
                               ],
                             ),

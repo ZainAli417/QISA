@@ -32,6 +32,7 @@ import '../../providers/principal_provider.dart';
 import '../../providers/role_provider.dart';
 import '../../providers/teacher_provider.dart';
 import '../../providers/topic_provider.dart';
+import '../../utils/api.dart';
 import '../Quiz and Audio/Audio_Player_UI.dart';
 
 class ConferenceMeetingScreen extends StatefulWidget {
@@ -84,35 +85,28 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
   late DatabaseReference _dbRef;
   Timer? _timer;
   int _remainingMinutes = 30;
-  late final bool isTeacher;
-  late final bool isStudent;
+   bool isTeacher= false;
+   bool isStudent=false;
+   bool isPrincipal=false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     isTeacher = context.read<RoleProvider>().isTeacher;
     isStudent = context.read<RoleProvider>().isStudent;
+    isPrincipal = context.read<RoleProvider>().isPrincipal;
   }
   @override
   void initState() {
-    super.initState(); // Move this to the top
+    super.initState();
 
-    _dbRef = FirebaseDatabase.instance.ref("remainingTime/${widget.meetingId}");
-
-    if (isTeacher) {
-      _initializeTimer();
-    } else {
-      _listenToRemainingTime();
-    }
-
-    _setupAudioFilesListener();
-    _setupBroadcastListener();
-
+    // Set device orientations first
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
 
+    // Initialize meeting first
     meeting = VideoSDK.createRoom(
       roomId: widget.meetingId,
       token: widget.token,
@@ -131,12 +125,67 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
     );
 
     registerMeetingEvents(meeting);
-    meeting.join();
 
-    if (isStudent) {
-      storeParticipantStats();
+    // Join the meeting, then store participant stats when the local participant is ready.
+    meeting.join().then((_) {
+      // Now that meeting is joined, localParticipant should be available.
+      if (!isPrincipal) {
+        storeParticipantStats();
+      }
+    });
+
+    // Initialize other listeners/references
+    _dbRef = FirebaseDatabase.instance.ref("remainingTime/${widget.meetingId}");
+
+    if (isTeacher) {
+      _initializeTimer();
+    } else {
+      _listenToRemainingTime();
+    }
+    if (isPrincipal) {
+      startTimer(widget.token, widget.meetingId);
+    }
+
+    _setupAudioFilesListener();
+    _setupBroadcastListener();
+  }
+
+  Duration? elapsedTime;
+  Timer? sessionTimer;
+
+  /// Starts a session timer based on the session start time.
+  Future<void> startTimer(String token, String meetingId) async {
+    dynamic session = await fetchSession(token, meetingId);
+    DateTime sessionStartTime = DateTime.parse(session['start']);
+    final difference = DateTime.now().difference(sessionStartTime);
+
+    setState(() {
+      elapsedTime = difference;
+      sessionTimer = Timer.periodic(
+        const Duration(seconds: 1),
+            (timer) {
+          setState(() {
+            elapsedTime = Duration(
+                seconds: elapsedTime != null ? elapsedTime!.inSeconds + 1 : 0);
+          });
+        },
+      );
+    });
+  }
+  Future<void> saveElapsedTime(String meetingId, Duration elapsedTime) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('meeting_record')
+          .doc(meetingId)
+          .update({
+        'elapsed_time': elapsedTime.inMinutes, // or convert to minutes if needed
+      });
+    } catch (e) {
+      print("Error saving elapsed time: $e");
     }
   }
+
+
 
   void _initializeTimer() {
     _dbRef.set(_remainingMinutes); // Set initial time in the database
@@ -156,6 +205,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
           _timer?.cancel();
 
           meeting.end();
+
         }
         Future.delayed(const Duration(milliseconds: 500), () {
           Navigator.pushReplacement(
@@ -168,7 +218,6 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       });
     });
   }
-
   void _listenToRemainingTime() {
     _dbRef.onValue.listen((event) {
       final time = event.snapshot.value as int?;
@@ -249,13 +298,6 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
     }
   }
 
-
-
-
-
-
-
-
   Future<void> _playAudio_stats(String audioUrl) async {
     if (_currentPlayingAudioUrl == audioUrl) {
       // If the same audio is clicked, pause it
@@ -267,10 +309,10 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
         _currentPlayingAudioUrl = audioUrl; // Track currently playing audio URL
         audioPlayedCount++; // Increment play count
       });
+
       await updateAudioCountInFirestore(audioPlayedCount);
     }
   }
-
   void _stopCurrentAudio() {
     if (_currentAudioPlayer != null) {
       _currentAudioPlayer?.pause(); // Pause the current audio
@@ -279,41 +321,42 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       _currentPlayingAudioUrl = null; // Reset the currently playing audio URL
     }
   }
-
   Future<void> storeParticipantStats() async {
-    final participantId =
-        meeting.localParticipant.id; // Retrieve participant ID
-
-    // Format the current time as HH:mm:ss
+    final participantId = meeting.localParticipant.id; // Retrieve participant ID
 
     final data = {
       'displayName': widget.displayName,
-      'joinTime':
-          FieldValue.serverTimestamp(), // Store current time as a Timestamp
+      'joinTime': FieldValue.serverTimestamp(), // Store current time as a Timestamp
       'audioPlayedCount': 0, // Initialize audio played count to zero
       'Q_Marks': 20, // Initialize quiz marks
       'isLocal': true, // Set to true since this is the local participant
+      'inmeeting': true, // Set to true since this is the local participant
     };
 
-    final DocumentReference participantDoc =
-        FirebaseFirestore.instance.collection('Stats').doc(participantId);
+    try {
+      final DocumentReference participantDoc = FirebaseFirestore.instance
+          .collection('meeting_record')
+          .doc(meeting.id)
+          .collection('Stats')
+          .doc(participantId);
 
-    await participantDoc.set(data, SetOptions(merge: true));
-    print('Participant stats stored for participant $participantId');
+      await participantDoc.set(data, SetOptions(merge: true));
+      print('Participant stats stored for participant $participantId');
+    } catch (e) {
+      print('Error saving participant stats: $e');
+    }
   }
 
   Future<void> updateAudioCountInFirestore(int playCount) async {
-    final participantId =
-        meeting.localParticipant.id; // Retrieve participant ID
+    final participantId = meeting.localParticipant.id; // Retrieve participant ID
     final DocumentReference participantDoc =
-        FirebaseFirestore.instance.collection('Stats').doc(participantId);
+        FirebaseFirestore.instance.collection('meeting_record').doc(meeting.id).collection('Stats').doc(participantId);
 
     // Update the audio played count
     await participantDoc.update({'audioPlayedCount': playCount});
     print(
         'Updated audio played count for participant $participantId: $playCount');
   }
-
   @override
   Widget build(BuildContext context) {
     final principalProvider = Provider.of<PrincipalProvider>(context);
@@ -491,23 +534,29 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                             secondChild: const SizedBox.shrink(),
                             firstChild: MeetingActionBar(
                               isMicEnabled: audioStream != null,
+                              meeting: meeting, // Added meeting argument
+
                               isCamEnabled: videoStream != null,
                               isScreenShareEnabled: shareStream != null,
                               recordingState: recordingState,
                               // Called when Call End button is pressed
-                              onCallEndButtonPressed: () {
+                              onCallEndButtonPressed: () async {
+                                // End the meeting.
                                 meeting.end();
 
-                                Future.delayed(
-                                    const Duration(milliseconds: 500), () {
+                                // Save the elapsed session time.
+                                // Use a fallback (Duration.zero) if elapsedTime is null.
+                                await saveElapsedTime(meeting.id, elapsedTime ?? Duration.zero);
+
+                                // Delay navigation briefly to ensure data is saved.
+                                Future.delayed(const Duration(milliseconds: 500), () {
                                   Navigator.pushReplacement(
                                     context,
-                                    MaterialPageRoute(
-                                        builder: (context) =>
-                                            SplashScreen()), // Navigate to TeacherScreen
+                                    MaterialPageRoute(builder: (context) => SplashScreen()),
                                   );
                                 });
                               },
+
 
                               onCallLeaveButtonPressed: () {
                                 meeting.leave();
@@ -1024,7 +1073,6 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
           : const WaitingToJoin(),
     );
   }
-
   Widget buildCreateMoreButton() {
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
@@ -1049,15 +1097,24 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       ),
       onPressed: () async {
         meeting.leave();
+        final roleProvider = Provider.of<RoleProvider>(context, listen: false);
         Future.delayed(const Duration(milliseconds: 500), () {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => TeacherScreen()),
-          );
+          if (roleProvider.isTeacher) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) =>  SplashScreen()),
+            );
+          } else if (roleProvider.isPrincipal) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => TeacherScreen()),
+            );
+          }
         });
       },
     );
   }
+
 
   void registerMeetingEvents(Room _meeting) {
     // Called when joined in meeting
@@ -1201,6 +1258,13 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
     _timer?.cancel(); // Cancel the timer on dispose
   }
 }
+
+
+
+
+
+
+
 
 class QuizWidget extends StatefulWidget {
   @override

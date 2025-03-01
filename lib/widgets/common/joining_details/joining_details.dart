@@ -4,16 +4,19 @@ import 'package:responsive_framework/responsive_framework.dart';
 import 'package:videosdk_flutter_example/constants/colors.dart';
 import 'package:videosdk_flutter_example/utils/spacer.dart';
 import 'package:videosdk_flutter_example/utils/toast.dart';
-final GlobalKey<_JoiningDetailsState> assingedtokey = GlobalKey<_JoiningDetailsState>();
+
+final GlobalKey<_JoiningDetailsState> assingedtokey =
+GlobalKey<_JoiningDetailsState>();
+
 class JoiningDetails extends StatefulWidget {
   final bool isCreateMeeting;
   final Function onClickMeetingJoin;
 
-  const JoiningDetails(
-      {Key? key,
-      required this.isCreateMeeting,
-      required this.onClickMeetingJoin})
-      : super(key: key);
+  const JoiningDetails({
+    Key? key,
+    required this.isCreateMeeting,
+    required this.onClickMeetingJoin,
+  }) : super(key: key);
 
   @override
   State<JoiningDetails> createState() => _JoiningDetailsState();
@@ -35,95 +38,211 @@ class _JoiningDetailsState extends State<JoiningDetails> {
     final maxWidth = MediaQuery.of(context).size.width;
     return Column(
       children: [
-        const VerticalSpacer(16),
+        const VerticalSpacer(
+          20,
+        ), // Increased vertical spacer for better spacing
         if (!widget.isCreateMeeting)
-          Container(
-            decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12), color: black750),
-            child: TextField(
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontWeight: FontWeight.w500,
-                color: Colors.white,
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20,
+            ), // Added horizontal padding
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(15), // More rounded corners
+                color: black750,
               ),
-              onChanged: ((value) => _meetingId = value),
-              decoration: InputDecoration(
-                  constraints: BoxConstraints.tightFor(
-                    width: ResponsiveValue<double>(context, conditionalValues: [
-                      Condition.equals(name: MOBILE, value: maxWidth / 1.3),
-                      Condition.equals(name: TABLET, value: maxWidth / 1.3),
-                      Condition.equals(name: DESKTOP, value: maxWidth / 3),
-                    ]).value!,
-                  ),
-                  hintText: "Enter meeting code",
-                  hintStyle: const TextStyle(
+              child: TextField(
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                ),
+                onChanged: ((value) => _meetingId = value),
+                decoration: InputDecoration(
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 18,
+                  ), // Increased vertical padding inside textfield
+                  prefixIcon: const Icon(
+                    Icons.meeting_room_outlined,
                     color: textGray,
+                  ), // Added icon
+                  labelText: "Meeting Code", // Added label text
+                  labelStyle: const TextStyle(
+                    color: textGray,
+                  ), // Style for label
+                  floatingLabelStyle: const TextStyle(
+                    color: Colors.white,
+                  ), // Style for floating label when focused
+                  floatingLabelBehavior:
+                  FloatingLabelBehavior
+                      .always, // Ensure label is always visible
+
+                  constraints: BoxConstraints.tightFor(
+                    width:
+                    ResponsiveValue<double>(
+                      context,
+                      conditionalValues: [
+                        Condition.equals(
+                          name: MOBILE,
+                          value: maxWidth / 1.3,
+                        ),
+                        Condition.equals(
+                          name: TABLET,
+                          value: maxWidth / 1.3,
+                        ),
+                        Condition.equals(
+                          name: DESKTOP,
+                          value: maxWidth / 3,
+                        ),
+                      ],
+                    ).value!,
                   ),
-                  border: InputBorder.none),
+                  hintText: "Enter meeting code here",
+                  hintStyle: const TextStyle(color: textGray),
+                  border: OutlineInputBorder(
+                    // Use OutlineInputBorder for cleaner look
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: BorderSide.none, // Remove default border
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    // Border when focused
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: const BorderSide(color: Colors.white),
+                  ),
+                ),
+              ),
             ),
           ),
-        if (!widget.isCreateMeeting) const VerticalSpacer(16),
-        Container(
-          decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12), color: black750),
-          child: TextField(
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-                fontWeight: FontWeight.w500, color: Colors.white),
-            onChanged: ((value) => _displayName = value),
-            decoration: InputDecoration(
-                constraints: BoxConstraints.tightFor(
-                  width: ResponsiveValue<double>(context, conditionalValues: [
-                    Condition.equals(name: MOBILE, value: maxWidth / 1.3),
-                    Condition.equals(name: TABLET, value: maxWidth / 1.3),
-                    Condition.equals(name: DESKTOP, value: maxWidth / 3),
-                  ]).value!,
+        if (!widget.isCreateMeeting)
+          const VerticalSpacer(20), // Increased vertical spacer
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20,
+            ), // Added horizontal padding
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(15), // More rounded corners
+                color: black750,
+              ),
+              child: TextField(
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
                 ),
-                hintText: "Enter your name",
-                hintStyle: const TextStyle(
-                  color: textGray,
+                onChanged: ((value) => _displayName = value),
+                decoration: InputDecoration(
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 18,
+                  ), // Increased vertical padding inside textfield
+                  prefixIcon: const Icon(
+                    Icons.person_outline,
+                    color: Colors.white70,
+                  ), // Added icon
+                  labelText: "Your Name", // Added label text
+                  labelStyle: const TextStyle(
+                    color: textGray,
+                  ), // Style for label
+                  floatingLabelStyle: const TextStyle(
+                    color: Colors.white,
+                  ), // Style for floating label when focused
+                  floatingLabelBehavior:
+                  FloatingLabelBehavior
+                      .always, // Ensure label is always visible
+
+                  constraints: BoxConstraints.tightFor(
+                    width:
+                    ResponsiveValue<double>(
+                      context,
+                      conditionalValues: [
+                        Condition.equals(
+                          name: MOBILE,
+                          value: maxWidth / 1.3,
+                        ),
+                        Condition.equals(
+                          name: TABLET,
+                          value: maxWidth / 1.3,
+                        ),
+                        Condition.equals(
+                          name: DESKTOP,
+                          value: maxWidth / 3,
+                        ),
+                      ],
+                    ).value!,
+                  ),
+                  hintText: "Enter your name here",
+                  hintStyle: const TextStyle(color: Colors.white70),
+                  border: OutlineInputBorder(
+                    // Use OutlineInputBorder for cleaner look
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: BorderSide.none, // Remove default border
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    // Border when focused
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: const BorderSide(color: Colors.white70),
+                  ),
                 ),
-                border: InputBorder.none),
+              ),
+            ),
           ),
         ),
+        const VerticalSpacer(25), // Increased vertical spacer before button
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 20,
+          ), // Horizontal padding for button
+          child: MaterialButton(
 
-      
-        const VerticalSpacer(16),
-        MaterialButton(
-            minWidth: ResponsiveValue<double>(context, conditionalValues: [
-              Condition.equals(name: MOBILE, value: maxWidth / 1.9),
-              Condition.equals(name: TABLET, value: maxWidth / 1.3),
-              Condition.equals(name: DESKTOP, value: maxWidth / 3),
-            ]).value!,
-            height: 10,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            minWidth:
+            ResponsiveValue<double>(
+              context,
+              conditionalValues: [
+                Condition.equals(name: MOBILE, value: maxWidth / 1.9),
+                Condition.equals(name: TABLET, value: maxWidth / 1.3),
+                Condition.equals(name: DESKTOP, value: maxWidth / 3),
+              ],
+            ).value!,
+            height: 50, // Increased button height
+            elevation: 3, // Added elevation for button
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
+            ), // More rounded button
             padding: const EdgeInsets.symmetric(vertical: 16),
-            color: purple,
-            child: const Text("Join Meeting+",
-                style: TextStyle(fontSize: 16, color: Colors.white)),
+            color: Colors.blue,
+            child: const Text(
+              "Join Meeting +",
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ), // Bold font weight
             onPressed: () {
               if (_displayName.trim().isEmpty) {
                 showSnackBarMessage(
-                    message: "Please enter name", context: context);
+                  message: "Please enter name",
+                  context: context,
+                );
                 return;
               }
               if (!widget.isCreateMeeting && _meetingId.trim().isEmpty) {
                 showSnackBarMessage(
-                    message: "Please enter meeting id", context: context);
+                  message: "Please enter meeting id",
+                  context: context,
+                );
                 return;
               }
               widget.onClickMeetingJoin(
-                  _meetingId.trim(), meetingMode, _displayName.trim()
-//funtion to store meeting display name
-
+                _meetingId.trim(),
+                meetingMode,
+                _displayName.trim(),
               );
-            }),
-
-
-
-
-
+            },
+          ),
+        ),
+        const VerticalSpacer(20), // Added vertical spacer at the bottom
       ],
     );
   }

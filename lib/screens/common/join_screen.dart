@@ -20,7 +20,6 @@ import '../../widgets/common/pre_call/dropdowns_Web.dart';
 import '../../widgets/common/pre_call/selectAudioDevice.dart';
 import '../../widgets/common/pre_call/selectVideoDevice.dart';
 
-// Join Screen
 class JoinScreen extends StatefulWidget {
   const JoinScreen({Key? key}) : super(key: key);
 
@@ -31,23 +30,18 @@ class JoinScreen extends StatefulWidget {
 class _JoinScreenState extends State<JoinScreen> with WidgetsBindingObserver {
   String _token = "";
 
-  // Control Status
-  bool isMicOn =
-      !kIsWeb && (Platform.isMacOS || Platform.isWindows) ? true : false;
-  bool isCameraOn =
-      !kIsWeb && (Platform.isMacOS || Platform.isWindows) ? true : false;
+  // Disable any camera/mic preview by default.
+  bool isMicOn = false;
+  bool isCameraOn = false;
 
   CustomTrack? cameraTrack;
   CustomTrack? microphoneTrack;
   RTCVideoRenderer? cameraRenderer;
 
-  bool? isJoinMeetingSelected;
-  bool? isCreateMeetingSelected;
-
   bool? isCameraPermissionAllowed =
-      !kIsWeb && (Platform.isMacOS || Platform.isWindows) ? true : false;
+  !kIsWeb && (Platform.isMacOS || Platform.isWindows) ? true : false;
   bool? isMicrophonePermissionAllowed =
-      !kIsWeb && (Platform.isMacOS || Platform.isWindows) ? true : false;
+  !kIsWeb && (Platform.isMacOS || Platform.isWindows) ? true : false;
 
   VideoDeviceInfo? selectedVideoDevice;
   AudioDeviceInfo? selectedAudioOutputDevice;
@@ -62,16 +56,16 @@ class _JoinScreenState extends State<JoinScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-
     WidgetsBinding.instance.addObserver(this);
-
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
+    SystemChrome.setPreferredOrientations(
+      const [
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+      ],
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final token = await fetchToken(context);
-      setState(() => _token = token);
+      if (mounted) setState(() => _token = token);
     });
     checkandReqPermissions();
     subscribe();
@@ -82,11 +76,8 @@ class _JoinScreenState extends State<JoinScreen> with WidgetsBindingObserver {
       setState(() {
         selectedAudioOutputDevice = device;
       });
-      if (!kIsWeb) {
-        if (Platform.isAndroid || Platform.isIOS) {
-          disposeMicTrack();
-          initMic();
-        }
+      if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+        // No microphone track disposal or initialization.
       }
     }
   }
@@ -96,64 +87,51 @@ class _JoinScreenState extends State<JoinScreen> with WidgetsBindingObserver {
       setState(() {
         selectedAudioInputDevice = device;
       });
-      disposeMicTrack();
-      initMic();
     }
   }
 
   void updateSelectedVideoDevice(VideoDeviceInfo? device) {
     if (device?.deviceId != selectedVideoDevice?.deviceId) {
-
-      disposeCameraPreview();
       setState(() {
         selectedVideoDevice = device;
       });
-
-      initCameraPreview();
     }
   }
 
   Future<void> checkBluetoothPermissions() async {
     try {
       bool bluetoothPerm = await VideoSDK.checkBluetoothPermission();
-      if (bluetoothPerm != true) {
+      if (!bluetoothPerm) {
         await VideoSDK.requestBluetoothPermission();
       }
     } catch (e) {}
   }
 
   void getDevices() async {
-    if (isCameraPermissionAllowed != null &&
-        isCameraPermissionAllowed == true) {
+    if (isCameraPermissionAllowed == true) {
       videoDevices = await VideoSDK.getVideoDevices();
       setState(() {
         selectedVideoDevice = videoDevices?.first;
       });
-      initCameraPreview();
     }
-    if (isMicrophonePermissionAllowed != null &&
-        isMicrophonePermissionAllowed == true) {
+    if (isMicrophonePermissionAllowed == true) {
       audioDevices = await VideoSDK.getAudioDevices();
-      if (!kIsWeb && !Platform.isMacOS && !Platform.isWindows) {
-        //Condition for android and ios devices
+      if (!kIsWeb &&
+          !Platform.isMacOS &&
+          !Platform.isWindows) {
         setState(() {
           selectedAudioOutputDevice = audioDevices?.first;
         });
       } else {
-        audioInputDevices = [];
-        audioOutputDevices = [];
-        for (AudioDeviceInfo device in audioDevices!) {
-          if (device.kind == 'audioinput') {
-            audioInputDevices.add(device);
-          } else {
-            audioOutputDevices.add(device);
-          }
-        }
+        // Optimized filtering using where()
+        audioInputDevices =
+            audioDevices!.where((d) => d.kind == 'audioinput').toList();
+        audioOutputDevices =
+            audioDevices!.where((d) => d.kind != 'audioinput').toList();
         setState(() {
           selectedAudioOutputDevice = audioOutputDevices.first;
           selectedAudioInputDevice = audioInputDevices.first;
         });
-        initMic();
       }
     }
   }
@@ -162,38 +140,31 @@ class _JoinScreenState extends State<JoinScreen> with WidgetsBindingObserver {
     perm ??= Permissions.audio_video;
     try {
       if (kIsWeb || Platform.isAndroid || Platform.isIOS) {
-        Map<String, bool> permissions = await VideoSDK.checkPermissions();
-
+        final permissions = await VideoSDK.checkPermissions();
         if (perm == Permissions.audio || perm == Permissions.audio_video) {
           if (permissions['audio'] != true) {
-            Map<String, bool> reqPermissions =
-                await VideoSDK.requestPermissions(Permissions.audio);
+            final reqPermissions =
+            await VideoSDK.requestPermissions(Permissions.audio);
             setState(() {
               isMicrophonePermissionAllowed = reqPermissions['audio'];
-              isMicOn = reqPermissions['audio']!;
             });
           } else {
             setState(() {
               isMicrophonePermissionAllowed = true;
-              isMicOn = true;
             });
           }
         }
-
         if (perm == Permissions.video || perm == Permissions.audio_video) {
           if (permissions['video'] != true) {
-            Map<String, bool> reqPermissions =
-                await VideoSDK.requestPermissions(Permissions.video);
-
+            final reqPermissions =
+            await VideoSDK.requestPermissions(Permissions.video);
             setState(() => isCameraPermissionAllowed = reqPermissions['video']);
           } else {
             setState(() => isCameraPermissionAllowed = true);
           }
         }
-        if (!kIsWeb) {
-          if (Platform.isAndroid) {
-            await checkBluetoothPermissions();
-          }
+        if (!kIsWeb && Platform.isAndroid) {
+          await checkBluetoothPermissions();
         }
       }
       getDevices();
@@ -202,12 +173,10 @@ class _JoinScreenState extends State<JoinScreen> with WidgetsBindingObserver {
 
   void checkPermissions() async {
     if (kIsWeb || Platform.isAndroid || Platform.isIOS) {
-      Map<String, bool> permissions = await VideoSDK.checkPermissions();
+      final permissions = await VideoSDK.checkPermissions();
       setState(() {
         isMicrophonePermissionAllowed = permissions['audio'];
         isCameraPermissionAllowed = permissions['video'];
-        isMicOn = permissions['audio']!;
-        isCameraOn = permissions['video']!;
       });
     }
   }
@@ -219,22 +188,16 @@ class _JoinScreenState extends State<JoinScreen> with WidgetsBindingObserver {
         checkPermissions();
         break;
       case AppLifecycleState.detached:
-        // TODO: Handle this case.
-        throw UnimplementedError();
       case AppLifecycleState.inactive:
-        // TODO: Handle this case.
-        throw UnimplementedError();
       case AppLifecycleState.hidden:
-        // TODO: Handle this case.
-        throw UnimplementedError();
       case AppLifecycleState.paused:
-        // TODO: Handle this case.
+      // Keeping original logic
         throw UnimplementedError();
     }
   }
 
   @override
-  setState(fn) {
+  void setState(fn) {
     if (mounted) {
       super.setState(fn);
     }
@@ -243,375 +206,180 @@ class _JoinScreenState extends State<JoinScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final maxWidth = MediaQuery.of(context).size.width;
-    final maxHeight = MediaQuery.of(context).size.height;
+    final viewportConstraints = MediaQuery.of(context).size;
+    // Cache the desktop/platform check.
+    final bool isDesktop = kIsWeb || Platform.isWindows || Platform.isMacOS;
+
     return PopScope(
-        canPop: false,
-        onPopInvoked: (didPop) async {
-          if (didPop) {
-            return;
-          }
-          _onWillPopScope();
-        },
-        child: Scaffold(
-          appBar: !kIsWeb && (Platform.isAndroid || Platform.isIOS)
-              ? AppBar(
-            flexibleSpace: Align(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 40, 10, 0), // Adjust padding to include space for back icon
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween, // Align back icon and other icons at ends
-                  children: [
-                    // Back Icon
-                    IconButton(
-                      icon: const Icon(
-                        Icons.arrow_back,
-                        size: 27,
-                        color: Colors.white,
-                      ),
-                      onPressed: () {
-                        final roleProvider = Provider.of<RoleProvider>(context, listen: false);
-
-                        if (roleProvider.isPrincipal) {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(builder: (context) => TeacherScreen()),
-                          );
-                        } else {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(builder: (context) => SplashScreen()),
-                          );
-                        }
-                      },
+      canPop: false,
+      onPopInvoked: (didPop) async {},
+      child: Scaffold(
+        appBar: !kIsWeb && (Platform.isAndroid || Platform.isIOS)
+            ? AppBar(
+          flexibleSpace: Align(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 40, 10, 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    icon: const Icon(
+                      Icons.arrow_back,
+                      size: 27,
+                      color: Colors.white,
                     ),
+                    onPressed: () {
+                      final roleProvider = Provider.of<RoleProvider>(
+                        context,
+                        listen: false,
+                      );
+                      if (roleProvider.isPrincipal) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>  TeacherScreen(),
+                          ),
+                        );
+                      } else {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>  SplashScreen(),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                  // Removed the Row containing volume_up and camera_alt_rounded IconButton
+                  // Row(
+                  //   children: [
+                  //     IconButton(
+                  //       icon: const Icon(
+                  //         Icons.volume_up,
+                  //         size: 27,
+                  //         color: Colors.white,
+                  //       ),
+                  //       onPressed: () {
+                  //         showModalBottomSheet<void>(
+                  //           context: context,
+                  //           builder: (BuildContext context) {
+                  //             return Container(
+                  //               color: black750,
+                  //               child: Padding(
+                  //                 padding: const EdgeInsets.symmetric(
+                  //                     vertical: 10),
+                  //                 child: SelectAudioDevice(
+                  //                   isMicrophonePermissionAllowed:
+                  //                   isMicrophonePermissionAllowed,
+                  //                   selectedAudioOutputDevice:
+                  //                   selectedAudioOutputDevice,
+                  //                   audioDevices: audioDevices,
+                  //                   onAudioDeviceSelected:
+                  //                   updateselectedAudioOutputDevice,
+                  //                 ),
+                  //               ),
+                  //             );
+                  //           },
+                  //         );
+                  //       },
+                  //     ),
+                  //     IconButton(
+                  //       icon: const Icon(
+                  //         Icons.camera_alt_rounded,
+                  //         size: 27,
+                  //         color: Colors.white,
+                  //       ),
+                  //       onPressed: () {
+                  //         showModalBottomSheet<void>(
+                  //           context: context,
+                  //           builder: (BuildContext context) {
+                  //             return Container(
+                  //               color: black750,
+                  //               child: Padding(
+                  //                 padding: const EdgeInsets.symmetric(
+                  //                     vertical: 10),
+                  //                 child: SelectVideoDevice(
+                  //                   isCameraPermissionAllowed:
+                  //                   isCameraPermissionAllowed,
+                  //                   selectedVideoDevice:
+                  //                   selectedVideoDevice,
+                  //                   videoDevices: videoDevices,
+                  //                   onVideoDeviceSelected:
+                  //                   updateSelectedVideoDevice,
+                  //                 ),
+                  //               ),
+                  //             );
+                  //           },
+                  //         );
+                  //       },
+                  //     ),
+                  //   ],
+                  // ),
+                ],
+              ),
+            ),
+          ),
+          backgroundColor: black750,
+          elevation: 0,
+        )
+            : null,
+        backgroundColor: primaryColor,
+        body: SafeArea(
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints viewportConstraints) {
+              Widget _buildContent() {
+                return isDesktop
+                    ? ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: viewportConstraints.maxHeight,
+                  ),
+                  child: Container(
+                    margin: EdgeInsets.only(top: maxWidth / 10),
+                    child: JoinOptions(
+                      maxWidth: maxWidth,
+                      onClickMeetingJoin: _onClickMeetingJoin,
+                    ),
+                  ),
+                )
 
-                    Row(
+
+
+
+                    : SingleChildScrollView(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: viewportConstraints.maxHeight,
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        // Volume Icon
-                        IconButton(
-                          icon: const Icon(
-                            Icons.volume_up,
-                            size: 27,
-                            color: Colors.white,
-                          ),
-                          onPressed: () {
-                            showModalBottomSheet<void>(
-                              context: context,
-                              builder: (BuildContext context) {
-                                return Container(
-                                  color: black750,
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 10),
-                                    child: SelectAudioDevice(
-                                      isMicrophonePermissionAllowed:
-                                      isMicrophonePermissionAllowed,
-                                      selectedAudioOutputDevice:
-                                      selectedAudioOutputDevice,
-                                      audioDevices: audioDevices,
-                                      onAudioDeviceSelected:
-                                      updateselectedAudioOutputDevice,
-                                    ),
-                                  ),
-                                );
-                              },
-                            );
-                          },
-                        ),
-                        // Camera Icon
-                        IconButton(
-                          icon: const Icon(
-                            Icons.camera_alt_rounded,
-                            size: 27,
-                            color: Colors.white,
-                          ),
-                          onPressed: () {
-                            showModalBottomSheet<void>(
-                              context: context,
-                              builder: (BuildContext context) {
-                                return Container(
-                                  color: black750,
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 10),
-                                    child: SelectVideoDevice(
-                                      isCameraPermissionAllowed:
-                                      isCameraPermissionAllowed,
-                                      selectedVideoDevice: selectedVideoDevice,
-                                      videoDevices: videoDevices,
-                                      onVideoDeviceSelected: updateSelectedVideoDevice,
-                                    ),
-                                  ),
-                                );
-                              },
-                            );
-
-
-                          },
+                        JoinOptions(
+                          maxWidth: maxWidth,
+                          onClickMeetingJoin: _onClickMeetingJoin,
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-            ),
-            backgroundColor: black750,
-            elevation: 0,
-          )
-
-              : null,
-          backgroundColor: primaryColor,
-          body: SafeArea(
-            child: LayoutBuilder(
-              builder:
-                  (BuildContext context, BoxConstraints viewportConstraints) {
-                Widget _buildContent() {
-                  return IntrinsicHeight(
-                    child: kIsWeb || Platform.isWindows || Platform.isMacOS
-                        ? Container(
-                            margin: const EdgeInsets.all(10),
-                            child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceAround,
-                                children: [
-                                 /*
-                                  SizedBox(
-                                    height: maxHeight,
-                                    width: maxWidth / 2,
-                                    child: Column(
-                                      children: [
-                                        JoinView(
-                                          cameraRenderer: cameraRenderer,
-                                          isMicOn: isMicOn,
-                                          isCameraOn: isCameraOn,
-                                          onMicToggle: () =>
-                                              isMicrophonePermissionAllowed !=
-                                                          null &&
-                                                      isMicrophonePermissionAllowed ==
-                                                          true
-                                                  ? {
-                                                      if (isMicOn)
-                                                        {disposeMicTrack()}
-                                                      else
-                                                        {initMic()},
-                                                      setState(
-                                                        () =>
-                                                            isMicOn = !isMicOn,
-                                                      )
-                                                    }
-                                                  : checkandReqPermissions(
-                                                      Permissions.audio),
-                                          onCameraToggle: () {
-                                            isCameraPermissionAllowed != null &&
-                                                    isCameraPermissionAllowed ==
-                                                        true
-                                                ? {
-                                                    if (isCameraOn)
-                                                      {disposeCameraPreview()}
-                                                    else
-                                                      {initCameraPreview()},
-                                                    setState(() => isCameraOn =
-                                                        !isCameraOn)
-                                                  }
-                                                : checkandReqPermissions(
-                                                    Permissions.video);
-                                          },
-                                        ),
-                                        kIsWeb ||
-                                                Platform.isMacOS ||
-                                                Platform.isWindows
-                                            ? Padding(
-                                                padding:
-                                                    const EdgeInsets.fromLTRB(
-                                                        0, 20, 0, 0),
-                                                child: DropdownsWebWidget(
-                                                  isCameraPermissionAllowed:
-                                                      isCameraPermissionAllowed,
-                                                  isMicrophonePermissionAllowed:
-                                                      isMicrophonePermissionAllowed,
-                                                  selectedAudioOutputDevice:
-                                                      selectedAudioOutputDevice,
-                                                  selectedAudioInputDevice:
-                                                      selectedAudioInputDevice,
-                                                  selectedVideoDevice:
-                                                      selectedVideoDevice,
-                                                  audioInputDevices:
-                                                      audioInputDevices,
-                                                  audioOutputDevices:
-                                                      audioOutputDevices,
-                                                  videoDevices: videoDevices,
-                                                  onAudioOutputDeviceSelected:
-                                                      updateselectedAudioOutputDevice,
-                                                  onAudioInputDeviceSelected:
-                                                      updateselectedAudioInputDevice,
-                                                  onVideoDeviceSelected:
-                                                      updateSelectedVideoDevice,
-                                                ),
-                                              )
-                                            : Container(),
-                                      ],
-                                    ),
-                                  ),
-
-                                  */
-                                  Container(
-                                    margin: EdgeInsets.only(top: maxWidth / 10),
-                                    child: JoinOptions(
-                                      isJoinMeetingSelected:
-                                          isJoinMeetingSelected,
-                                      isCreateMeetingSelected:
-                                          isCreateMeetingSelected,
-                                      maxWidth: maxWidth,
-                                      onOptionSelected: (isCreateMeeting) {
-                                        setState(() {
-                                          isCreateMeetingSelected =
-                                              isCreateMeeting;
-                                          isJoinMeetingSelected = true;
-                                        });
-                                      },
-                                      onClickMeetingJoin: _onClickMeetingJoin,
-                                    ),
-                                  )
-                                ]),
-                          )
-                        : Column(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: [
-                                SizedBox(
-                                  height: 1,
-                                  width: maxWidth,
-                                  child: JoinView(
-                                    cameraRenderer: cameraRenderer,
-                                    isMicOn: isMicOn,
-                                    isCameraOn: isCameraOn,
-                                    onMicToggle: () =>
-                                        isMicrophonePermissionAllowed != null &&
-                                                isMicrophonePermissionAllowed ==
-                                                    true
-                                            ? {
-                                                if (isMicOn)
-                                                  {disposeMicTrack()}
-                                                else
-                                                  {initMic()},
-                                                setState(
-                                                  () => isMicOn = !isMicOn,
-                                                )
-                                              }
-                                            : checkandReqPermissions(
-                                                Permissions.audio),
-                                    onCameraToggle: () {
-                                      isCameraPermissionAllowed != null &&
-                                              isCameraPermissionAllowed == true
-                                          ? {
-                                              if (isCameraOn)
-                                                {disposeCameraPreview()}
-                                              else
-                                                {initCameraPreview()},
-                                              setState(() =>
-                                                  isCameraOn = !isCameraOn)
-                                            }
-                                          : checkandReqPermissions(
-                                              Permissions.video);
-                                    },
-                                  ),
-                                ),
-                                JoinOptions(
-                                  isJoinMeetingSelected: isJoinMeetingSelected,
-                                  isCreateMeetingSelected:
-                                      isCreateMeetingSelected,
-                                  maxWidth: maxWidth,
-                                  onOptionSelected: (isCreateMeeting) {
-                                    setState(() {
-                                      isCreateMeetingSelected = isCreateMeeting;
-                                      isJoinMeetingSelected = true;
-                                    });
-                                  },
-                                  onClickMeetingJoin: _onClickMeetingJoin,
-                                )
-                              ]),
-                  );
-                }
-
-                return kIsWeb || Platform.isMacOS || Platform.isWindows
-                    ? ConstrainedBox(
-                        constraints: BoxConstraints(
-                            minHeight: viewportConstraints.maxHeight),
-                        child: _buildContent(),
-                      )
-                    : SingleChildScrollView(
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                              minHeight: viewportConstraints.maxHeight),
-                          child: _buildContent(),
-                        ),
-                      );
-              },
-            ),
+                  ),
+                );
+              }
+              return _buildContent();
+            },
           ),
-        ));
+        ),
+      ),
+    );
   }
 
-  Future<bool> _onWillPopScope() async {
-    if (isJoinMeetingSelected != null && isCreateMeetingSelected != null) {
-      setState(() {
-        isJoinMeetingSelected = null;
-        isCreateMeetingSelected = null;
-      });
-      return false;
-    } else {
-      return true;
-    }
-  }
-
-  void initCameraPreview() async {
-    if (isCameraPermissionAllowed != null &&
-        isCameraPermissionAllowed == true ) {
-      CustomTrack? track = await VideoSDK.createCameraVideoTrack(
-          cameraId: selectedVideoDevice?.deviceId);
-      RTCVideoRenderer render = RTCVideoRenderer();
-      await render.initialize();
-      render.setSrcObject(
-          stream: track?.mediaStream,
-          trackId: track?.mediaStream.getVideoTracks().first.id);
-      setState(() {
-        cameraTrack = track;
-        cameraRenderer = render;
-        isCameraOn = true;
-      });
-    }
-  }
-
-  void initMic() async {
-    if (isMicrophonePermissionAllowed != null &&
-        isMicrophonePermissionAllowed == true) {
-      CustomTrack? track = await VideoSDK.createMicrophoneAudioTrack(
-          microphoneId: kIsWeb || Platform.isMacOS || Platform.isWindows
-              ? selectedAudioInputDevice?.deviceId
-              : selectedAudioOutputDevice?.deviceId);
-      setState(() {
-        microphoneTrack = track;
-      });
-    }
-  }
-
-  void disposeCameraPreview() {
-    cameraTrack?.dispose();
-    setState(() {
-      cameraRenderer = null;
-      cameraTrack = null;
-    });
-  }
-
-  void disposeMicTrack() {
-    microphoneTrack?.dispose();
-    setState(() {
-      microphoneTrack = null;
-    });
-  }
 
   void _onClickMeetingJoin(meetingId, callType, displayName) async {
+    final roleProvider = Provider.of<RoleProvider>(context, listen: false);
+
     if (displayName.toString().isEmpty) {
       displayName = "Guest";
     }
-    if (isCreateMeetingSelected!) {
+
+    if (roleProvider.isPrincipal) {
+
       createAndJoinMeeting(callType, displayName);
     } else {
       joinMeeting(callType, displayName, meetingId);
@@ -736,12 +504,14 @@ class _JoinScreenState extends State<JoinScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     unsubscribe();
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
+    SystemChrome.setPreferredOrientations(
+      const [
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ],
+    );
     super.dispose();
   }
 }

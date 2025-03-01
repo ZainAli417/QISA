@@ -5,7 +5,7 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 android {
-    namespace = "com.example.lora"
+    namespace = "com.example.videosdk_flutter_example"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
