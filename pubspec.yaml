@@ -44,6 +44,8 @@ dependencies:
   just_audio: ^0.9.42
   qr_flutter: ^4.1.0
   share_plus: ^10.1.4
+  mobile_scanner: ^6.0.6
+
 
 
 

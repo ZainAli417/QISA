@@ -116,32 +116,7 @@ String meetingId= '';
                   ),
                 ),
               ),
-              Positioned(
-                bottom: 20,
-                right: 210,
-                child: Container(
-                  width: 300,
-                  height: 200,
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                        width: 2, color: Colors.white.withOpacity(0.25)),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 25,
-                right: 250,
-                child: Container(
-                  width: 200,
-                  height: 200,
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                        width: 2, color: Colors.white.withOpacity(0.25)),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
+
               Positioned(
                 top: 60,
                 left: 30,
@@ -549,11 +524,9 @@ class _StatsDialogState extends State<StatsDialog> {
 // Function to listen to stats changes in Firestore
   void listenToStats() {
     statsSubscription = FirebaseFirestore.instance
-        .collection('Stats')
+        .collection('meeting_record').doc(widget.meetingId).collection('Stats')
         .snapshots()
         .listen((snapshot) {
-      // Extract data into a list of maps
-      // Extract data into a list of maps
       List<Map<String, dynamic>> fetchedData = snapshot.docs.map((doc) {
         Map<String, dynamic> data = doc.data();
         return {

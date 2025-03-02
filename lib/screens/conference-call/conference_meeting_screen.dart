@@ -85,17 +85,24 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
   late DatabaseReference _dbRef;
   Timer? _timer;
   int _remainingMinutes = 30;
-   bool isTeacher= false;
-   bool isStudent=false;
-   bool isPrincipal=false;
+  bool isTeacher = false;
+  bool isStudent = false;
+  bool isPrincipal = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    isTeacher = context.read<RoleProvider>().isTeacher;
-    isStudent = context.read<RoleProvider>().isStudent;
-    isPrincipal = context.read<RoleProvider>().isPrincipal;
+    isTeacher = context
+        .read<RoleProvider>()
+        .isTeacher;
+    isStudent = context
+        .read<RoleProvider>()
+        .isStudent;
+    isPrincipal = context
+        .read<RoleProvider>()
+        .isPrincipal;
   }
+
   @override
   void initState() {
     super.initState();
@@ -172,19 +179,20 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       );
     });
   }
+
   Future<void> saveElapsedTime(String meetingId, Duration elapsedTime) async {
     try {
       await FirebaseFirestore.instance
           .collection('meeting_record')
           .doc(meetingId)
           .update({
-        'elapsed_time': elapsedTime.inMinutes, // or convert to minutes if needed
+        'elapsed_time': elapsedTime.inMinutes,
+        // or convert to minutes if needed
       });
     } catch (e) {
       print("Error saving elapsed time: $e");
     }
   }
-
 
 
   void _initializeTimer() {
@@ -205,7 +213,6 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
           _timer?.cancel();
 
           meeting.end();
-
         }
         Future.delayed(const Duration(milliseconds: 500), () {
           Navigator.pushReplacement(
@@ -218,6 +225,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       });
     });
   }
+
   void _listenToRemainingTime() {
     _dbRef.onValue.listen((event) {
       final time = event.snapshot.value as int?;
@@ -228,6 +236,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       }
     });
   }
+
   void _showWarningPopup() {
     showDialog(
       context: context,
@@ -248,9 +257,10 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       },
     );
   }
+
   void _setupBroadcastListener() {
     final collectionRef =
-        FirebaseFirestore.instance.collection('broadcast_voice');
+    FirebaseFirestore.instance.collection('broadcast_voice');
 
     _broadcastSubscription = collectionRef
         .orderBy('CreatedAt', descending: true)
@@ -267,10 +277,12 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       });
     });
   }
+
   StreamSubscription? _audioFilesSubscription;
+
   void _setupAudioFilesListener() {
     final collectionRef =
-        FirebaseFirestore.instance.collection('Study_material');
+    FirebaseFirestore.instance.collection('Study_material');
 
     _audioFilesSubscription = collectionRef.snapshots().listen((querySnapshot) {
       try {
@@ -285,6 +297,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       }
     });
   }
+
   void _playAudio_simple(String audioUrl) {
     if (_currentPlayingAudioUrl == audioUrl) {
       // If the same audio is clicked, pause it
@@ -313,6 +326,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       await updateAudioCountInFirestore(audioPlayedCount);
     }
   }
+
   void _stopCurrentAudio() {
     if (_currentAudioPlayer != null) {
       _currentAudioPlayer?.pause(); // Pause the current audio
@@ -321,16 +335,23 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       _currentPlayingAudioUrl = null; // Reset the currently playing audio URL
     }
   }
+
   Future<void> storeParticipantStats() async {
-    final participantId = meeting.localParticipant.id; // Retrieve participant ID
+    final participantId = meeting.localParticipant
+        .id; // Retrieve participant ID
 
     final data = {
       'displayName': widget.displayName,
-      'joinTime': FieldValue.serverTimestamp(), // Store current time as a Timestamp
-      'audioPlayedCount': 0, // Initialize audio played count to zero
-      'Q_Marks': 20, // Initialize quiz marks
-      'isLocal': true, // Set to true since this is the local participant
-      'inmeeting': true, // Set to true since this is the local participant
+      'joinTime': FieldValue.serverTimestamp(),
+      // Store current time as a Timestamp
+      'audioPlayedCount': 0,
+      // Initialize audio played count to zero
+      'Q_marks': 20,
+      // Initialize quiz marks
+      'isLocal': true,
+      // Set to true since this is the local participant
+      'inmeeting': true,
+      // Set to true since this is the local participant
     };
 
     try {
@@ -348,751 +369,699 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
   }
 
   Future<void> updateAudioCountInFirestore(int playCount) async {
-    final participantId = meeting.localParticipant.id; // Retrieve participant ID
+    final participantId = meeting.localParticipant
+        .id; // Retrieve participant ID
     final DocumentReference participantDoc =
-        FirebaseFirestore.instance.collection('meeting_record').doc(meeting.id).collection('Stats').doc(participantId);
+    FirebaseFirestore.instance.collection('meeting_record')
+        .doc(meeting.id)
+        .collection('Stats')
+        .doc(participantId);
 
     // Update the audio played count
     await participantDoc.update({'audioPlayedCount': playCount});
     print(
         'Updated audio played count for participant $participantId: $playCount');
   }
+
   @override
   Widget build(BuildContext context) {
     final principalProvider = Provider.of<PrincipalProvider>(context);
-    //Get statusbar height
     final statusbarHeight = MediaQuery.of(context).padding.top;
     bool isWebMobile = kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.iOS ||
             defaultTargetPlatform == TargetPlatform.android);
+
     return PopScope(
       canPop: false,
       onPopInvoked: (didPop) async {
-        if (didPop) {
-          return;
+        if (didPop) return;
+        bool shouldPop = await _onWillPopScope();
+        if (shouldPop) {
+          Navigator.of(context).pop();
         }
-        _onWillPopScope();
       },
       child: _joined
           ? SafeArea(
-              child: Scaffold(
-                  backgroundColor: Theme.of(context).primaryColor,
-                  body: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    children: [
-                      !isWebMobile &&
-                              (kIsWeb || Platform.isMacOS || Platform.isWindows)
-                          ? WebMeetingAppBar(
-                              meeting: meeting,
-                              token: widget.token,
-                              recordingState: recordingState,
-                              isMicEnabled: audioStream != null,
-                              isCamEnabled: videoStream != null,
-                              isLocalScreenShareEnabled: shareStream != null,
-                              isRemoteScreenShareEnabled:
-                                  remoteParticipantShareStream != null,
-                            )
-                          : MeetingAppBar(
-                              meeting: meeting,
-                              token: widget.token,
-                              recordingState: recordingState,
-                              isFullScreen: fullScreen,
-                            ),
-                      const Divider(),
-                      Center(
+        child: Scaffold(
+          backgroundColor: Colors.grey[900],
+          body: Column(
+            mainAxisSize: MainAxisSize.max,
+            children: [
+              // AppBar based on platform
+              !isWebMobile &&
+                  (kIsWeb || Platform.isMacOS || Platform.isWindows)
+                  ? WebMeetingAppBar(
+                meeting: meeting,
+                token: widget.token,
+                recordingState: recordingState,
+                isMicEnabled: audioStream != null,
+                isCamEnabled: videoStream != null,
+                isLocalScreenShareEnabled: shareStream != null,
+                isRemoteScreenShareEnabled:
+                remoteParticipantShareStream != null,
+              )
+                  : MeetingAppBar(
+                meeting: meeting,
+                token: widget.token,
+                recordingState: recordingState,
+                isFullScreen: fullScreen,
+              ),
+              Divider(color: Colors.grey[700], height: 1),
+              // Remaining Time
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                child: Text(
+                  'Remaining Time: $_remainingMinutes minutes',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              Divider(color: Colors.grey[700], height: 1),
+
+        Expanded(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(
+                      horizontal: 10.0, vertical: 8.0),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[850],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ConferenceParticipantGrid(meeting: meeting),
+                ),
+              ),
+
+              // Broadcasts / Announcements
+              _broadcasts.isEmpty
+                  ? Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20.0),
+                child: Text(
+                  'No Announcements Made Till Now.',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    color: Colors.grey[400],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              )
+                  : Expanded(
+                child: ListView.builder(
+                  physics: const NeverScrollableScrollPhysics(),
+                  shrinkWrap: true,
+                  itemCount: _broadcasts.length,
+                  itemBuilder: (context, index) {
+                    final broadcast = _broadcasts[index];
+                    return Card(
+                      color: Colors.white,
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 16.0, vertical: 8.0),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 2,
+                      child: Padding(
+                        padding: const EdgeInsets.all(5.0),
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment:
+                          CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Remaining Time: $_remainingMinutes minutes',
-                              style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white),
+                              'Coordinator: ${broadcast['coordinator']}',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
                             ),
+                            if (broadcast['audioFiles'].isNotEmpty)
+                              Column(
+                                crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                                children: broadcast['audioFiles']
+                                    .map<Widget>((audioUrl) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(
+                                        top: 5.0),
+                                    child: AudioPlayerWidget(
+                                      audioUrl: audioUrl,
+                                      onPlay: () =>
+                                          _playAudio_simple(audioUrl),
+                                      onStop: _stopCurrentAudio,
+                                      isPlaying:
+                                      _currentPlayingAudioUrl ==
+                                          audioUrl,
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
                           ],
                         ),
                       ),
-                      _broadcasts.isEmpty
-                          ? Center(
-                              child: Padding(
-                                padding: const EdgeInsets.only(top: 10.0),
-                                child: Text(
-                                  'No Announcements Made Till Now.',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 16,
-                                    color: Colors.grey,
+                    );
+                  },
+                ),
+              ),
+
+              // Conference Participants
+              Divider(color: Colors.grey[700], height: 1),
+
+
+              // Action Buttons for Bottom Sheets
+              Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  mainAxisSize: MainAxisSize.max,
+                  children: [
+                    _buildActionButton(
+                      context: context,
+                      icon: Icons.book,
+                      label: 'Lectures',
+                      onPressed: () => Lecture_button_Conditional_Trigger(context),
+                    ),
+                    _buildActionButton(
+                      context: context,
+                      icon: Icons.quiz,
+                      label: 'Quiz',
+                      onPressed: () => _showQuizBottomSheet(context),
+                    ),
+
+                    Consumer<RoleProvider>(
+                      builder: (context, roleProvider, child) {
+                        if (roleProvider.isPrincipal) {
+                          return _buildActionButton(
+                            context: context,
+                            icon: Icons.video_call,
+                            label: 'Create',
+                            onPressed: () async {
+                              meeting.leave();
+                              Future.delayed(
+                                  const Duration(milliseconds: 500), () {
+                                Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (context) =>
+                                          TeacherScreen()),
+                                );
+                              });
+                            },
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
+              // Meeting Action Bar
+              AnimatedCrossFade(
+                duration: const Duration(milliseconds: 300),
+                crossFadeState: !fullScreen
+                    ? CrossFadeState.showFirst
+                    : CrossFadeState.showSecond,
+                secondChild: const SizedBox.shrink(),
+                firstChild: Container(
+                  padding: const EdgeInsets.all(8.0),
+                  color: Colors.grey[900],
+                  child: MeetingActionBar(
+                    isMicEnabled: audioStream != null,
+                    meeting: meeting,
+                    isCamEnabled: videoStream != null,
+                    isScreenShareEnabled: shareStream != null,
+                    recordingState: recordingState,
+                    onCallEndButtonPressed: () async {
+                      meeting.end();
+                      await saveElapsedTime(
+                          meeting.id, elapsedTime ?? Duration.zero);
+                      Future.delayed(const Duration(milliseconds: 500), () {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => SplashScreen()),
+                        );
+                      });
+                    },
+                    onCallLeaveButtonPressed: () {
+                      meeting.leave();
+                      Future.delayed(const Duration(milliseconds: 500), () {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) => SplashScreen()),
+                        );
+                      });
+                    },
+                    onMicButtonPressed: () {
+                      if (audioStream != null) {
+                        meeting.muteMic();
+                      } else {
+                        meeting.unmuteMic();
+                      }
+                    },
+                    onCameraButtonPressed: () {
+                      if (videoStream != null) {
+                        meeting.disableCam();
+                      } else {
+                        meeting.enableCam();
+                      }
+                    },
+                    onSwitchMicButtonPressed: (details) async {
+                      List<AudioDeviceInfo>? outputDevice =
+                      await VideoSDK.getAudioDevices();
+                      double bottomMargin = (70.0 * outputDevice!.length);
+                      final screenSize = MediaQuery.of(context).size;
+                      await showMenu(
+                        context: context,
+                        color: Colors.grey[800],
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        position: RelativeRect.fromLTRB(
+                          screenSize.width - details.globalPosition.dx,
+                          details.globalPosition.dy - bottomMargin,
+                          details.globalPosition.dx,
+                          bottomMargin,
+                        ),
+                        items: outputDevice.map((e) {
+                          return PopupMenuItem(
+                            padding: EdgeInsets.zero,
+                            value: e,
+                            child: Container(
+                              color: e.deviceId ==
+                                  meeting.selectedSpeaker?.deviceId
+                                  ? Colors.grey[700]
+                                  : Colors.transparent,
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: Padding(
+                                  padding:
+                                  const EdgeInsets.fromLTRB(16, 10, 5, 10),
+                                  child: Text(
+                                    e.label,
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                    ),
                                   ),
                                 ),
                               ),
-                            )
-                          : Column(
-                              children: [
-                                // Class Teacher Grid
-                                ListView.builder(
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  shrinkWrap: true,
-                                  itemCount: _broadcasts.length,
-                                  itemBuilder: (context, index) {
-                                    final broadcast = _broadcasts[index];
-
-                                    return Card(
-                                      color: Colors.white,
-                                      elevation: 0,
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          // Coordinator Name (Optional)
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                                vertical: 8.0,
-                                                horizontal: 16.0),
-                                            child: Text(
-                                              'Coordinator: ${broadcast['coordinator']}',
-                                              style: GoogleFonts.poppins(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w600,
-                                                color: Colors.black87,
-                                              ),
-                                            ),
-                                          ),
-                                          if (broadcast['audioFiles']
-                                              .isNotEmpty)
-                                            Padding(
-                                              padding:
-                                                  const EdgeInsets.all(16.0),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children:
-                                                    broadcast['audioFiles']
-                                                        .map<Widget>(
-                                                            (audioUrl) {
-                                                  return AudioPlayerWidget(
-                                                    audioUrl: audioUrl,
-                                                    onPlay: () =>
-                                                        _playAudio_simple(
-                                                            audioUrl),
-                                                    onStop: _stopCurrentAudio,
-                                                    isPlaying:
-                                                        _currentPlayingAudioUrl ==
-                                                            audioUrl,
-                                                  );
-                                                }).toList(),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-                      SizedBox(height: 10),
-                      Consumer<RoleProvider>(
-                        builder: (context, roleProvider, child) {
-                          if (roleProvider.isPrincipal) {
-                            return Center(
-                              child: buildCreateMoreButton(),
-                            );
-                          } else {
-                            // Return an empty container if the conditions are not met
-                            return SizedBox.shrink();
-                          }
-                        },
-                      ),
-                      Expanded(
-                          child: Container(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 15.0, vertical: 8.0),
-                        child: Flex(
-                          direction: ResponsiveValue<Axis>(context,
-                              conditionalValues: [
-                                Condition.equals(
-                                    name: MOBILE, value: Axis.vertical),
-                                Condition.largerThan(
-                                    name: MOBILE, value: Axis.horizontal),
-                              ]).value!,
-                          children: [
-                            ConferenseScreenShareView(meeting: meeting),
-                            Expanded(
-                              child:
-                                  ConferenceParticipantGrid(meeting: meeting),
-                            ),
-                          ],
-                        ),
-                      )),
-                      Column(
-                        children: [
-                          const Divider(),
-                          AnimatedCrossFade(
-                            duration: const Duration(milliseconds: 300),
-                            crossFadeState: !fullScreen
-                                ? CrossFadeState.showFirst
-                                : CrossFadeState.showSecond,
-                            secondChild: const SizedBox.shrink(),
-                            firstChild: MeetingActionBar(
-                              isMicEnabled: audioStream != null,
-                              meeting: meeting, // Added meeting argument
-
-                              isCamEnabled: videoStream != null,
-                              isScreenShareEnabled: shareStream != null,
-                              recordingState: recordingState,
-                              // Called when Call End button is pressed
-                              onCallEndButtonPressed: () async {
-                                // End the meeting.
-                                meeting.end();
-
-                                // Save the elapsed session time.
-                                // Use a fallback (Duration.zero) if elapsedTime is null.
-                                await saveElapsedTime(meeting.id, elapsedTime ?? Duration.zero);
-
-                                // Delay navigation briefly to ensure data is saved.
-                                Future.delayed(const Duration(milliseconds: 500), () {
-                                  Navigator.pushReplacement(
-                                    context,
-                                    MaterialPageRoute(builder: (context) => SplashScreen()),
-                                  );
-                                });
-                              },
-
-
-                              onCallLeaveButtonPressed: () {
-                                meeting.leave();
-                                Future.delayed(
-                                    const Duration(milliseconds: 500), () {
-                                  Navigator.pushReplacement(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (context) =>
-                                            SplashScreen()), // Navigate to TeacherScreen
-                                  );
-                                });
-                              },
-                              // Called when mic button is pressed
-                              onMicButtonPressed: () {
-                                if (audioStream != null) {
-                                  meeting.muteMic();
-                                } else {
-                                  meeting.unmuteMic();
-                                }
-                              },
-                              // Called when camera button is pressed
-                              onCameraButtonPressed: () {
-                                if (videoStream != null) {
-                                  meeting.disableCam();
-                                } else {
-                                  meeting.enableCam();
-                                }
-                              },
-
-                              onSwitchMicButtonPressed: (details) async {
-                                List<AudioDeviceInfo>? outputDevice =
-                                    await VideoSDK.getAudioDevices();
-
-                                double bottomMargin =
-                                    (70.0 * outputDevice!.length);
-                                final screenSize = MediaQuery.of(context).size;
-                                await showMenu(
-                                  context: context,
-                                  color: black700,
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12)),
-                                  position: RelativeRect.fromLTRB(
-                                    screenSize.width -
-                                        details.globalPosition.dx,
-                                    details.globalPosition.dy - bottomMargin,
-                                    details.globalPosition.dx,
-                                    (bottomMargin),
-                                  ),
-                                  items: outputDevice.map((e) {
-                                    return PopupMenuItem(
-                                      padding: EdgeInsets.zero,
-                                      value: e,
-                                      child: Container(
-                                        color: e.deviceId ==
-                                                meeting
-                                                    .selectedSpeaker?.deviceId
-                                            ? Color.fromRGBO(109, 110, 113, 1)
-                                            : Colors.transparent,
-                                        child: SizedBox(
-                                          width: double.infinity,
-                                          child: Padding(
-                                            padding: EdgeInsets.fromLTRB(16, 10,
-                                                5, 10), // Ensure no padding
-                                            child: Text(e.label),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  }).toList(),
-                                  elevation: 8.0,
-                                ).then((value) {
-                                  if (value != null) {
-                                    meeting.switchAudioDevice(value);
-                                  }
-                                });
-                              },
-
-                              onChatButtonPressed: () {
-                                setState(() {
-                                  showChatSnackbar = false;
-                                });
-                                showModalBottomSheet(
-                                  context: context,
-                                  constraints: BoxConstraints(
-                                      maxHeight:
-                                          MediaQuery.of(context).size.height -
-                                              statusbarHeight),
-                                  isScrollControlled: true,
-                                  builder: (context) => ChatView(
-                                      key: const Key("ChatScreen"),
-                                      meeting: meeting),
-                                ).whenComplete(() {
-                                  setState(() {
-                                    showChatSnackbar = true;
-                                  });
-                                });
-                              },
-
-                              // Called when more options button is pressed
-                              onMoreOptionSelected: (option) {
-                                // Showing more options dialog box
-                                if (option == "screenshare") {
-                                  if (remoteParticipantShareStream == null) {
-                                    if (shareStream == null) {
-                                      meeting.enableScreenShare();
-                                    } else {
-                                      meeting.disableScreenShare();
-                                    }
-                                  } else {
-                                    showSnackBarMessage(
-                                        message:
-                                            "Someone is already presenting",
-                                        context: context);
-                                  }
-                                } else if (option == "recording") {
-                                  if (recordingState == "RECORDING_STOPPING") {
-                                    showSnackBarMessage(
-                                        message:
-                                            "Recording is in stopping state",
-                                        context: context);
-                                  } else if (recordingState ==
-                                      "RECORDING_STARTED") {
-                                    meeting.stopRecording();
-                                  } else if (recordingState ==
-                                      "RECORDING_STARTING") {
-                                    showSnackBarMessage(
-                                        message:
-                                            "Recording is in starting state",
-                                        context: context);
-                                  } else {
-                                    meeting.startRecording();
-                                  }
-                                } else if (option == "participants") {
-                                  showModalBottomSheet(
-                                    context: context,
-                                    isScrollControlled: false,
-                                    builder: (context) =>
-                                        ParticipantList(meeting: meeting),
-                                  );
-                                }
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Divider(),
-                      Consumer<RoleProvider>(
-                          builder: (context, roleProvider, child) {
-                        if (roleProvider.isTeacher) {
-                          return Padding(
-                            padding: const EdgeInsets.all(10.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Lectures List',
-                                  style: GoogleFonts.poppins(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white),
-                                ),
-                                // LIST VIEW CODE
-                                StreamBuilder<QuerySnapshot>(
-                                  stream: FirebaseFirestore.instance
-                                      .collection('Study_material')
-                                      .snapshots(),
-                                  builder: (context, snapshot) {
-                                    if (snapshot.connectionState ==
-                                        ConnectionState.waiting) {
-                                      return const Center(
-                                          child: CircularProgressIndicator());
-                                    }
-                                    if (!snapshot.hasData ||
-                                        snapshot.data!.docs.isEmpty) {
-                                      return Row(children: [
-                                        Center(
-                                          child: Text(
-                                            'No lectures found.',
-                                            style: GoogleFonts.poppins(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w500,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ),
-
-                                        /* HIDE UPLOADING
-                                        Center(
-                                          child: FloatingActionButton(
-                                            onPressed: () {
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                    builder: (context) =>
-                                                        const Create_lecture()),
-                                              );
-                                            },
-                                            backgroundColor:
-                                                const Color(0xFF044B89),
-                                            child: SvgPicture.asset(
-                                              'assets/FAB.svg', // Replace with your custom SVG
-                                              width:
-                                                  40, // Adjust the size as needed
-                                              height:
-                                                  40, // Adjust the size as needed
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ),
-
-                                        */
-                                      ]);
-                                    }
-
-                                    final lectureDocs = snapshot.data!.docs;
-
-                                    return ListView.builder(
-                                      shrinkWrap: true,
-                                      physics:
-                                          const NeverScrollableScrollPhysics(),
-                                      itemCount: lectureDocs.length,
-                                      itemBuilder: (context, index) {
-                                        final lecture = lectureDocs[index];
-                                        final lectureName =
-                                            lecture['TopicName'] ?? 'No Name';
-                                        final lectureDescription =
-                                            lecture['TopicDescription'] ??
-                                                'No Description';
-                                        final audioFiles =
-                                            lecture['AudioFiles'] ?? [];
-                                        final status =
-                                            lecture['Status'] ?? 'Approved';
-
-                                        return Card(
-                                          color: Colors.white,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(15),
-                                            side: BorderSide(
-                                              color:
-                                                  Colors.grey.withOpacity(0.2),
-                                              width: 1,
-                                            ),
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              ListTile(
-                                                title: Text(
-                                                  'Lecture Name',
-                                                  style: GoogleFonts.poppins(
-                                                    fontSize: 12,
-                                                    color: Colors.grey,
-                                                    fontWeight: FontWeight.w500,
-                                                  ),
-                                                ),
-                                                subtitle: Text(
-                                                  lectureName,
-                                                  style: GoogleFonts.poppins(
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: Colors.black,
-                                                  ),
-                                                ),
-                                                trailing: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    ElevatedButton(
-                                                      style: ElevatedButton
-                                                          .styleFrom(
-                                                        shape:
-                                                            const StadiumBorder(),
-                                                        backgroundColor:
-                                                            Colors.blue,
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                          horizontal: 16,
-                                                          vertical: 8,
-                                                        ),
-                                                      ),
-                                                      onPressed: () {},
-                                                      child: Text(
-                                                        status,
-                                                        style:
-                                                            GoogleFonts.poppins(
-                                                          fontSize: 14,
-                                                          fontWeight:
-                                                              FontWeight.w500,
-                                                          color: Colors.white,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    IconButton(
-                                                      onPressed: () async {
-                                                        // Delete the lecture
-                                                        await FirebaseFirestore
-                                                            .instance
-                                                            .collection(
-                                                                'Study_material')
-                                                            .doc(lecture.id)
-                                                            .delete();
-                                                      },
-                                                      icon: const Icon(
-                                                        Icons.delete,
-                                                        color: Colors.red,
-                                                        size: 20,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              ListTile(
-                                                title: Text(
-                                                  'Lecture Description',
-                                                  style: GoogleFonts.poppins(
-                                                    fontSize: 12,
-                                                    color: Colors.grey,
-                                                    fontWeight: FontWeight.w500,
-                                                  ),
-                                                ),
-                                                subtitle: Text(
-                                                  lectureDescription,
-                                                  style: GoogleFonts.poppins(
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: Colors.black,
-                                                  ),
-                                                ),
-                                              ),
-                                              ListTile(
-                                                title: Text(
-                                                  'Lecture Audio Files',
-                                                  style: GoogleFonts.poppins(
-                                                    fontSize: 12,
-                                                    color: Colors.grey,
-                                                    fontWeight: FontWeight.w500,
-                                                  ),
-                                                ),
-                                                subtitle: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children:
-                                                      List<Widget>.generate(
-                                                          audioFiles.length,
-                                                          (audioIndex) {
-                                                    final audioUrl =
-                                                        audioFiles[audioIndex];
-                                                    return Padding(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                          vertical: 8),
-                                                      child: AudioPlayerWidget(
-                                                        audioUrl: audioUrl,
-                                                        onPlay: () =>
-                                                            _playAudio_simple(
-                                                                audioUrl),
-                                                        onStop: () =>
-                                                            _stopCurrentAudio(),
-                                                        isPlaying:
-                                                            _currentPlayingAudioUrl ==
-                                                                audioUrl,
-                                                      ),
-                                                    );
-                                                  }),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      },
-                                    );
-                                  },
-                                ),
-                              ],
                             ),
                           );
-                        } else if (roleProvider.isStudent) {
-                          return Expanded(
-                            child: SingleChildScrollView(
-                              child: Column(
+                        }).toList(),
+                        elevation: 8.0,
+                      ).then((value) {
+                        if (value != null) {
+                          meeting.switchAudioDevice(value);
+                        }
+                      });
+                    },
+                    onChatButtonPressed: () {
+                      setState(() {
+                        showChatSnackbar = false;
+                      });
+                      showModalBottomSheet(
+                        context: context,
+                        constraints: BoxConstraints(
+                            maxHeight:
+                            MediaQuery.of(context).size.height -
+                                statusbarHeight),
+                        isScrollControlled: true,
+                        builder: (context) => ChatView(
+                            key: const Key("ChatScreen"), meeting: meeting),
+                      ).whenComplete(() {
+                        setState(() {
+                          showChatSnackbar = true;
+                        });
+                      });
+                    },
+                    onMoreOptionSelected: (option) {
+                      if (option == "screenshare") {
+                        if (remoteParticipantShareStream == null) {
+                          if (shareStream == null) {
+                            meeting.enableScreenShare();
+                          } else {
+                            meeting.disableScreenShare();
+                          }
+                        } else {
+                          showSnackBarMessage(
+                              message: "Someone is already presenting",
+                              context: context);
+                        }
+                      } else if (option == "recording") {
+                        if (recordingState == "RECORDING_STOPPING") {
+                          showSnackBarMessage(
+                              message: "Recording is in stopping state",
+                              context: context);
+                        } else if (recordingState == "RECORDING_STARTED") {
+                          meeting.stopRecording();
+                        } else if (recordingState == "RECORDING_STARTING") {
+                          showSnackBarMessage(
+                              message: "Recording is in starting state",
+                              context: context);
+                        } else {
+                          meeting.startRecording();
+                        }
+                      } else if (option == "participants") {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: false,
+                          builder: (context) =>
+                              ParticipantList(meeting: meeting),
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      )
+          : const WaitingToJoin(),
+    );
+  }
+
+// Helper method to build action buttons
+  Widget _buildActionButton({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.grey[800],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        padding: const EdgeInsets.symmetric(horizontal: 46, vertical: 15),
+      ),
+      icon: Icon(icon, color: Colors.white, size: 20),
+      label: Text(
+        label,
+        style: GoogleFonts.poppins(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+  void Lecture_button_Conditional_Trigger(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent, // Makes background seamless
+      builder: (context) =>Container(
+        height: MediaQuery.of(context).size.height * 0.4,
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+            Container(
+              padding: const EdgeInsets.all(16.0),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Consumer<RoleProvider>(
+                builder: (context, roleProvider, child) {
+                  if (roleProvider.isTeacher) {
+                    return Teacher_Lecture_card(context);
+                  } else if (roleProvider.isStudent) {
+                    return Student_Lecture_card(context);
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+// Teacher Lectures List (extracted from original UI)
+  Widget Teacher_Lecture_card(BuildContext context) {
+    return
+        Expanded(
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance.collection('Study_material').snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return Center(
+                  child: Text(
+                    'No lectures found.',
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                );
+              }
+              final lectureDocs = snapshot.data!.docs;
+              return ListView.builder(
+                shrinkWrap: true,
+                itemCount: lectureDocs.length,
+                itemBuilder: (context, index) {
+                  final lecture = lectureDocs[index];
+                  final lectureName = lecture['TopicName'] ?? 'No Name';
+                  final lectureDescription =
+                      lecture['TopicDescription'] ?? 'No Description';
+                  final audioFiles = lecture['AudioFiles'] ?? [];
+                  final status = lecture['Status'] ?? 'Approved';
+                  return Card(
+                    color: Colors.white,
+                    margin: const EdgeInsets.only(bottom: 8.0),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    elevation: 0,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Class Teacher Grid
-                                  principalProvider.teacherCards.isEmpty
-                                      ? Center(
-                                          child: Padding(
-                                            padding: const EdgeInsets.only(
-                                                top: 50.0),
-                                            child: Text(
-                                              'No approved content available.',
-                                              style: GoogleFonts.poppins(
-                                                fontSize: 16,
-                                                color: Colors.grey,
-                                              ),
-                                            ),
-                                          ),
-                                        )
-                                      : ListView.builder(
-                                          physics:
-                                              const NeverScrollableScrollPhysics(),
-                                          shrinkWrap: true,
-                                          itemCount: principalProvider
-                                              .teacherCards.length,
-                                          itemBuilder: (context, index) {
-                                            final card = principalProvider
-                                                .teacherCards[index];
-
-                                            return Card(
-                                              color: Colors.white,
-                                              elevation: 0,
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Padding(
-                                                    padding: const EdgeInsets
-                                                        .fromLTRB(
-                                                        16.0,
-                                                        16.0,
-                                                        16.0,
-                                                        8.0), // Top-left padding
-                                                    child: Text(
-                                                      'List Of Lectures',
-                                                      style:
-                                                          GoogleFonts.poppins(
-                                                        fontSize: 20,
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  if (card['audioFiles']
-                                                      .isNotEmpty)
-                                                    Padding(
-                                                      padding:
-                                                          const EdgeInsets.all(
-                                                              16.0),
-                                                      child: Column(
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .start,
-                                                        children:
-                                                            card['audioFiles']
-                                                                .map<Widget>(
-                                                                    (audioUrl) {
-                                                          return AudioPlayerWidget(
-                                                            audioUrl: audioUrl,
-                                                            onPlay: () =>
-                                                                _playAudio_stats(
-                                                                    audioUrl),
-                                                            onStop:
-                                                                _stopCurrentAudio,
-                                                            isPlaying:
-                                                                _currentPlayingAudioUrl ==
-                                                                    audioUrl,
-                                                          );
-                                                        }).toList(),
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
-                                            );
-                                          },
-                                        ),
-
-                                  SizedBox(height: 20),
-                            const Padding(
-                            padding: EdgeInsets.symmetric(
-                            horizontal: 16.0),
-                              //VIDEO PLAYER
-                            ),
-
-                                  // Information Section
-                                  // QUIZZ SECTION UPDATE THIS TO HAVE QUIZ UI WITH TIMER AUTO SHIFT
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 16.0),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Quiz Screen',
-                                          style: GoogleFonts.poppins(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 10),
-                                        SizedBox(
-                                          // Ensures the QuizWidget fits within the available space
-                                          height: 250,
-                                          child: QuizWidget(),
-                                        ),
-                                      ],
+                                  Text(
+                                    'Lecture Name',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  Text(
+                                    lectureName,
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black87,
                                     ),
                                   ),
                                 ],
                               ),
+                              Row(
+                                children: [
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.blue[700],
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 8,
+                                      ),
+                                    ),
+                                    onPressed: () {},
+                                    child: Text(
+                                      status,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    onPressed: () async {
+                                      await FirebaseFirestore.instance
+                                          .collection('Study_material')
+                                          .doc(lecture.id)
+                                          .delete();
+                                    },
+                                    icon: const Icon(
+                                      Icons.delete,
+                                      color: Colors.red,
+                                      size: 24,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Lecture Description',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: Colors.grey,
+                              fontWeight: FontWeight.w500,
                             ),
-                          );
-                        } else {
-                          // Return an empty container if the conditions are not met
-                          return const SizedBox.shrink();
-                        }
-                      }),
-                    ],
-                  )),
-            )
-          : const WaitingToJoin(),
+                          ),
+                          Text(
+                            lectureDescription,
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          if (audioFiles.isNotEmpty)
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Lecture Audio Files',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                ...List<Widget>.generate(audioFiles.length,
+                                        (audioIndex) {
+                                      final audioUrl = audioFiles[audioIndex];
+                                      return Padding(
+                                        padding: const EdgeInsets.only(top: 8.0),
+
+                                        child: AudioPlayerWidget(
+                                          audioUrl: audioUrl,
+                                          onPlay: () => _playAudio_simple(audioUrl),
+                                          onStop: _stopCurrentAudio,
+                                          isPlaying:
+                                          _currentPlayingAudioUrl == audioUrl,
+                                        ),
+                                      );
+                                    }),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+
     );
   }
+// Student Lectures List (extracted from original UI)
+  Widget Student_Lecture_card(BuildContext context) {
+    final principalProvider = Provider.of<PrincipalProvider>(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+
+        Expanded(
+          child: principalProvider.teacherCards.isEmpty
+              ? Center(
+            child: Text(
+              'No approved content available.',
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          )
+              : ListView.builder(
+            physics: const NeverScrollableScrollPhysics(),
+            shrinkWrap: true,
+            itemCount: principalProvider.teacherCards.length,
+            itemBuilder: (context, index) {
+              final card = principalProvider.teacherCards[index];
+              return Card(
+                  color: Colors.white,
+                  margin: const EdgeInsets.only(bottom: 8.0),
+              shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
+              ),
+              elevation: 0,
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'List Of Lectures',
+                        style: GoogleFonts.poppins(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      if (card['audioFiles'].isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: card['audioFiles'].map<Widget>((audioUrl) {
+                              return AudioPlayerWidget(
+                                audioUrl: audioUrl,
+                                onPlay: () => _playAudio_stats(audioUrl),
+                                onStop: _stopCurrentAudio,
+                                isPlaying: _currentPlayingAudioUrl == audioUrl,
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+// Updated Create More Button UI
   Widget buildCreateMoreButton() {
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.blue.shade900,
+        backgroundColor: Colors.blue[900],
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10.0),
+          borderRadius: BorderRadius.circular(12),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        elevation: 4,
       ),
       icon: const Icon(
         Icons.video_camera_front_outlined,
         color: Colors.white,
-        size: 25,
+        size: 28,
       ),
       label: Text(
         "Create More Rooms",
         style: GoogleFonts.poppins(
-          fontSize: 14,
+          fontSize: 16,
           color: Colors.white,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
         ),
       ),
       onPressed: () async {
@@ -1102,7 +1071,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
           if (roleProvider.isTeacher) {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (context) =>  SplashScreen()),
+              MaterialPageRoute(builder: (context) => SplashScreen()),
             );
           } else if (roleProvider.isPrincipal) {
             Navigator.pushReplacement(
@@ -1116,11 +1085,83 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
   }
 
 
+
+  // Bottom Sheet for Quiz
+  void _showQuizBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.4,
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Quiz Screen',
+              style: GoogleFonts.poppins(
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(child: QuizWidget()),
+          ],
+        ),
+      ),
+    );
+  }
+// Bottom Sheet for Audio List
+  void Broadcast_Audio_List(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.5,
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Audio List',
+              style: GoogleFonts.poppins(
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ListView(
+                children: _broadcasts
+                    .expand((broadcast) => broadcast['audioFiles'] ?? [])
+                    .map<Widget>((audioUrl) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: AudioPlayerWidget(
+                      audioUrl: audioUrl,
+                      onPlay: () => _playAudio_simple(audioUrl),
+                      onStop: _stopCurrentAudio,
+                      isPlaying: _currentPlayingAudioUrl == audioUrl,
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+
   void registerMeetingEvents(Room _meeting) {
     // Called when joined in meeting
     _meeting.on(
       Events.roomJoined,
-      () {
+          () {
         setState(() {
           meeting = _meeting;
           _joined = true;
@@ -1143,14 +1184,14 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => TeacherScreen()),
-          (route) => false);
+              (route) => false);
     });
 
     // Called when recording is started
     _meeting.on(Events.recordingStateChanged, (String status) {
       showSnackBarMessage(
           message:
-              "Meeting recording ${status == "RECORDING_STARTING" ? "is starting" : status == "RECORDING_STARTED" ? "started" : status == "RECORDING_STOPPING" ? "is stopping" : "stopped"}",
+          "Meeting recording ${status == "RECORDING_STARTING" ? "is starting" : status == "RECORDING_STARTED" ? "started" : status == "RECORDING_STOPPING" ? "is stopping" : "stopped"}",
           context: context);
 
       setState(() {
@@ -1195,7 +1236,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
     // Called when presenter is changed
     _meeting.on(Events.presenterChanged, (_activePresenterId) {
       Participant? activePresenterParticipant =
-          _meeting.participants[_activePresenterId];
+      _meeting.participants[_activePresenterId];
 
       // Get Share Stream
       Stream? _stream = activePresenterParticipant?.streams.values
@@ -1206,15 +1247,14 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
 
     _meeting.on(
         Events.error,
-        (error) => {
-              showSnackBarMessage(
-                  message: error['name'].toString() +
-                      " :: " +
-                      error['message'].toString(),
-                  context: context)
-            });
+            (error) => {
+          showSnackBarMessage(
+              message: error['name'].toString() +
+                  " :: " +
+                  error['message'].toString(),
+              context: context)
+        });
   }
-
   void subscribeToChatMessages(Room meeting) {
     meeting.pubSub.subscribe("CHAT", (message) {
       if (message.senderId != meeting.localParticipant.id) {
@@ -1228,7 +1268,6 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       }
     });
   }
-
   Future<bool> _onWillPopScope() async {
     meeting.leave();
 
@@ -1240,7 +1279,6 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
     });
     return true;
   }
-
   @override
   void dispose() {
     _broadcastSubscription
@@ -1258,7 +1296,6 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
     _timer?.cancel(); // Cancel the timer on dispose
   }
 }
-
 
 
 
@@ -1515,7 +1552,7 @@ class _QuizWidgetState extends State<QuizWidget> {
                               question['question'],
                               style: GoogleFonts.poppins(
                                 fontSize: 16,
-                                color: Colors.white,
+                                color: Colors.black87,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -1585,7 +1622,7 @@ class _QuizWidgetState extends State<QuizWidget> {
                 'Quiz is Based on Lecture #01',
                 style: GoogleFonts.poppins(
                   fontSize: 14,
-                  color: Colors.white,
+                  color: Colors.black87,
                   fontWeight: FontWeight.w600,
                 ),
               ),

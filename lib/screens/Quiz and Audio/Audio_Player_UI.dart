@@ -48,6 +48,7 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
     // Synchronize the audio player with the parent's isPlaying state
     if (widget.isPlaying) {
@@ -57,7 +58,16 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
+      decoration: BoxDecoration(
+        color: Colors.white, // Background color
+        borderRadius: BorderRadius.circular(25), // Rounded corners
+        border: Border.all(
+          color: Colors.grey.shade400, // Border color
+          width: 2, // Border width
+        ),
+
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Row(
         children: [
           IconButton(
@@ -69,11 +79,7 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
               size: 30,
             ),
             onPressed: () {
-              if (widget.isPlaying) {
-                widget.onPlay(); // Notify the parent to play this audio
-              } else {
-                widget.onPlay(); // Notify the parent to play this audio
-              }
+              widget.isPlaying ? widget.onStop() : widget.onPlay();
             },
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -114,8 +120,7 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
               setState(() {
                 _isLooping = !_isLooping;
               });
-              await _audioPlayer
-                  .setLoopMode(_isLooping ? LoopMode.one : LoopMode.off);
+              await _audioPlayer.setLoopMode(_isLooping ? LoopMode.one : LoopMode.off);
             },
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -140,12 +145,8 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
               );
             },
           ),
-
-    ],
-
+        ],
       ),
-
-
     );
   }
 
