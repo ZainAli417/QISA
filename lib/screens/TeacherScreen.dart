@@ -470,6 +470,7 @@ class _StatsDialogState extends State<StatsDialog> {
         .collection('meeting_record')
         .doc(widget.meetingId)
         .collection('Stats')
+
         .where('role', isEqualTo: 'Student') // Filter only students
         .snapshots()
         .listen((snapshot) {
