@@ -118,7 +118,7 @@ class _JoiningDetailsState extends State<JoiningDetails> {
                 Condition.equals(name: TABLET, value: maxWidth / 1.3),
                 Condition.equals(name: DESKTOP, value: maxWidth / 3),
               ],
-            ).value!,
+            ).value,
             height: 50,
             elevation: 3,
             shape: RoundedRectangleBorder(

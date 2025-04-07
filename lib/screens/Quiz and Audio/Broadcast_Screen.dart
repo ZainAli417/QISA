@@ -27,7 +27,6 @@ class _Create_LectureState extends State<Broadcasting> {
   List<String> audioFiles = [];
   StreamSubscription? _broadcastSubscription;
 
-  AudioPlayer? _currentAudioPlayer; // Currently playing audio player
   String? _currentPlayingAudioUrl; // Track which audio URL is currently playing
 
   void initState() {
@@ -100,7 +99,7 @@ class _Create_LectureState extends State<Broadcasting> {
 
       if (audioUrls.isNotEmpty) {
         final docRef =
-            FirebaseFirestore.instance.collection('broadcast_voice').doc();
+        FirebaseFirestore.instance.collection('broadcast_voice').doc();
         await docRef.set({
           'AudioFiles': audioUrls, // Save all audio URLs as an array
           'Coordinator': broadcaster,
@@ -178,7 +177,7 @@ class _Create_LectureState extends State<Broadcasting> {
 
   void _setupBroadcastListener() {
     final collectionRef =
-        FirebaseFirestore.instance.collection('broadcast_voice');
+    FirebaseFirestore.instance.collection('broadcast_voice');
 
     _broadcastSubscription = collectionRef
         .orderBy('CreatedAt', descending: true)
@@ -196,26 +195,14 @@ class _Create_LectureState extends State<Broadcasting> {
     });
   }
 
-  void _stopCurrentAudio() {
-    if (_currentAudioPlayer != null) {
-      _currentAudioPlayer?.pause(); // Pause the current audio
-      _currentAudioPlayer?.dispose();
-      _currentAudioPlayer = null;
-      _currentPlayingAudioUrl = null; // Reset the currently playing audio URL
-    }
-  }
-
   void _playAudio(String audioUrl) {
-    if (_currentPlayingAudioUrl == audioUrl) {
-      // If the same audio is clicked, pause it
-      setState(() {
-        _currentPlayingAudioUrl = null; // Reset to not playing
-      });
-    } else {
-      setState(() {
-        _currentPlayingAudioUrl = audioUrl; // Track currently playing audio URL
-      });
-    }
+    setState(() {
+      if (_currentPlayingAudioUrl == audioUrl) {
+        _currentPlayingAudioUrl = null; // Toggle off if already playing
+      } else {
+        _currentPlayingAudioUrl = audioUrl; // Set as currently playing
+      }
+    });
   }
 
   @override
@@ -303,19 +290,19 @@ class _Create_LectureState extends State<Broadcasting> {
                     ),
                     Divider(),
                     Center(
-
-                        child: Text(
-                          'List of Live Broadcasts',
-                          style: GoogleFonts.quicksand(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.black87,
-                          ),
+                      child: Text(
+                        'List of Live Broadcasts',
+                        style: GoogleFonts.quicksand(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black87,
                         ),
-
+                      ),
                     ),
                     Divider(),
-                    SizedBox(height: 5,),
+                    SizedBox(
+                      height: 5,
+                    ),
                     Column(
                       children: [
                         // Class Teacher Grid
@@ -334,22 +321,20 @@ class _Create_LectureState extends State<Broadcasting> {
                                 children: [
                                   // Coordinator Name (Optional)
 
-
                                   if (broadcast['audioFiles'].isNotEmpty)
                                     Padding(
                                       padding: const EdgeInsets.all(6.0),
                                       child: Column(
                                         crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                        CrossAxisAlignment.start,
                                         children: broadcast['audioFiles']
                                             .map<Widget>((audioUrl) {
                                           return AudioPlayerWidget(
                                             audioUrl: audioUrl,
                                             onPlay: () => _playAudio(audioUrl),
-                                            onStop: _stopCurrentAudio,
                                             isPlaying:
-                                                _currentPlayingAudioUrl ==
-                                                    audioUrl,
+                                            _currentPlayingAudioUrl ==
+                                                audioUrl,
                                           );
                                         }).toList(),
                                       ),
@@ -374,7 +359,6 @@ class _Create_LectureState extends State<Broadcasting> {
   @override
   void dispose() {
     _broadcastSubscription?.cancel(); // Stop the listener when the widget is
-    _currentAudioPlayer?.dispose(); // Dispose the current audio player
     super.dispose();
   }
 }

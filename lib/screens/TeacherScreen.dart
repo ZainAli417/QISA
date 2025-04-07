@@ -36,65 +36,8 @@ class _TeacherScreenState extends State<TeacherScreen> {
   late StreamSubscription<QuerySnapshot> statsSubscription;
   late Room meeting;
 String meetingId= '';
-@override
-  void initState() {
-    super.initState();
-    listenToStats(); // Start listening to the Firestore collection
-  }
 
 
-  @override
-  void dispose() {
-    statsSubscription.cancel(); // Cancel subscription on dispose
-    super.dispose();
-  }
-
-// Function to listen to stats changes in Firestore
-  void listenToStats() {
-    statsSubscription = FirebaseFirestore.instance
-        .collection('Stats')
-        .snapshots()
-        .listen((snapshot) {
-      // Extract data into a list of maps
-      // Extract data into a list of maps
-      List<Map<String, dynamic>> fetchedData = snapshot.docs.map((doc) {
-        Map<String, dynamic> data = doc.data();
-        return {
-          'displayName': data['displayName'],
-          'audioPlayedCount': data['audioPlayedCount'] ?? 0,
-          'Q_marks': data['Q_marks'] ?? 0,
-          // Check if joinTime is a Timestamp and convert to DateTime
-          'joinTime': (data['joinTime'] is Timestamp)
-              ? (data['joinTime'] as Timestamp).toDate()
-              : DateFormat('HH:mm:ss').parse(data['joinTime']),
-        };
-      }).toList();
-
-      // Update the state with the new data
-      setState(() {
-        statsData = fetchedData; // Update the statsData
-      });
-    });
-  }
-
-
-/*
-  Widget _buildParticipantCountWidget(String roomId) {
-    return FutureBuilder<int>(
-      future: _getParticipantCount(roomId),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Text("Fetching participants..."); // Or a loading indicator
-        } else if (snapshot.hasError) {
-          return Text("Error: ${snapshot.error}");
-        } else {
-          return Text("Participants: ${snapshot.data ?? 0}", style: GoogleFonts.quicksand(fontSize: 14));
-        }
-      },
-    );
-  }
-
- */
 // Inside your main build method:
   Widget build(BuildContext context) {
     final teacherProvider = Provider.of<TeacherProvider>(context);
@@ -524,7 +467,10 @@ class _StatsDialogState extends State<StatsDialog> {
 // Function to listen to stats changes in Firestore
   void listenToStats() {
     statsSubscription = FirebaseFirestore.instance
-        .collection('meeting_record').doc(widget.meetingId).collection('Stats')
+        .collection('meeting_record')
+        .doc(widget.meetingId)
+        .collection('Stats')
+        .where('role', isEqualTo: 'Student') // Filter only students
         .snapshots()
         .listen((snapshot) {
       List<Map<String, dynamic>> fetchedData = snapshot.docs.map((doc) {
@@ -533,19 +479,18 @@ class _StatsDialogState extends State<StatsDialog> {
           'displayName': data['displayName'],
           'audioPlayedCount': data['audioPlayedCount'] ?? 0,
           'Q_marks': data['Q_marks'] ?? 0,
-          // Check if joinTime is a Timestamp and convert to DateTime
           'joinTime': (data['joinTime'] is Timestamp)
               ? (data['joinTime'] as Timestamp).toDate()
               : DateFormat('HH:mm:ss').parse(data['joinTime']),
         };
       }).toList();
 
-      // Update the state with the new data
       setState(() {
-        statsData = fetchedData; // Update the statsData
+        statsData = fetchedData;
       });
     });
   }
+
 
 
 

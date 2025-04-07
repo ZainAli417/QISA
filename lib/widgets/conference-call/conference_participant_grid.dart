@@ -71,15 +71,18 @@ class _ConferenceParticipantGridState extends State<ConferenceParticipantGrid> {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
+        mainAxisSize: MainAxisSize.max,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           for (int i = 0; i < onScreenParticipants.length; i++)
             for (int j = 0; j < onScreenParticipants[i]!.length; j++)
               Padding(
                 padding: const EdgeInsets.all(4.0),
                 child: SizedBox(
-                  width: 200,
-                  height: 150,
+                  width: 180,
+                  height: 180,
                   child: ParticipantGridTile(
+                    meetingId: widget.meeting.id, // Added meetingId argument
                     key: Key(onScreenParticipants[i]![j].id),
                     participant: onScreenParticipants[i]![j],
                     activeSpeakerId: activeSpeakerId,
@@ -98,11 +101,16 @@ class _ConferenceParticipantGridState extends State<ConferenceParticipantGrid> {
   Widget _buildGridView() {
     return GridView.builder(
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: ResponsiveValue<int>(context, conditionalValues: [
-          Condition.equals(name: MOBILE, value: 2),
-          Condition.equals(name: TABLET, value: 3),
-          Condition.largerThan(name: TABLET, value: 4),
-        ]).value!,
+        crossAxisCount: ResponsiveValue<int>(
+          context,
+          defaultValue: 2,
+          conditionalValues: [
+            Condition.equals(name: MOBILE, value: 2),
+            Condition.equals(name: TABLET, value: 3),
+            Condition.largerThan(name: TABLET, value: 4),
+          ],
+        ).value!,
+
         childAspectRatio: 4 / 3,
         crossAxisSpacing: 8.0,
         mainAxisSpacing: 8.0,
@@ -115,6 +123,7 @@ class _ConferenceParticipantGridState extends State<ConferenceParticipantGrid> {
         final participantList =
         onScreenParticipants.values.expand((p) => p).toList();
         return ParticipantGridTile(
+          meetingId: widget.meeting.id, // Added meetingId argument here as well.
           key: Key(participantList[index].id),
           participant: participantList[index],
           activeSpeakerId: activeSpeakerId,

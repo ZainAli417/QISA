@@ -19,7 +19,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   // Role data map with colors and icons
   final Map<String, Map<String, dynamic>> roleData = {
-    'Coordinator/HOD': {
+    'Coordinator/HOD/Principal': {
       'color': Colors.purple,
       'icon': Icons.admin_panel_settings,
     },
@@ -27,13 +27,9 @@ class _SplashScreenState extends State<SplashScreen>
       'color': Colors.green,
       'icon': Icons.book,
     },
-    'Students': {
+    'Students/Audience': {
       'color': Colors.orange,
       'icon': Icons.school,
-    },
-    'Visitors': {
-      'color': Colors.indigo,
-      'icon': Icons.person,
     },
   };
 
@@ -122,7 +118,7 @@ class _SplashScreenState extends State<SplashScreen>
                         const SizedBox(height: 32), // Increased spacing
                         _buildRoleButton(
                           context,
-                          'Coordinator/HOD',
+                          'Coordinator/HOD/Principal',
                               () {
                             Provider.of<RoleProvider>(context, listen: false)
                                 .setRole('Principal');
@@ -150,7 +146,7 @@ class _SplashScreenState extends State<SplashScreen>
                         const SizedBox(height: 16),
                         _buildRoleButton(
                           context,
-                          'Students',
+                          'Students/Audience',
                               () {
                             Provider.of<RoleProvider>(context, listen: false)
                                 .setRole('Student');
@@ -162,19 +158,6 @@ class _SplashScreenState extends State<SplashScreen>
                           },
                         ),
                         const SizedBox(height: 16),
-                        _buildRoleButton(
-                          context,
-                          'Visitors',
-                              () {
-                            Provider.of<RoleProvider>(context, listen: false)
-                                .setRole('Student');
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (context) => const JoinScreen()),
-                            );
-                          },
-                        ),
                       ],
                     ),
                   ),

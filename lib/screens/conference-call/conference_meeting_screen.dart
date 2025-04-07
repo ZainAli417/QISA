@@ -72,7 +72,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
   Stream? audioStream;
   Stream? remoteParticipantShareStream;
   bool fullScreen = false;
-
+  bool isMicEnabled = true; // assume mic starts enabled
   bool _isLoading = true;
   List<String> audioFiles = [];
   AudioPlayer? _currentAudioPlayer;
@@ -136,9 +136,9 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
     // Join the meeting, then store participant stats when the local participant is ready.
     meeting.join().then((_) {
       // Now that meeting is joined, localParticipant should be available.
-      if (!isPrincipal) {
+         Future.delayed(const Duration(seconds: 1));
         storeParticipantStats();
-      }
+
     });
 
     // Initialize other listeners/references
@@ -297,7 +297,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       }
     });
   }
-
+  /*
   void _playAudio_simple(String audioUrl) {
     if (_currentPlayingAudioUrl == audioUrl) {
       // If the same audio is clicked, pause it
@@ -310,7 +310,8 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       });
     }
   }
-
+  */
+/*
   Future<void> _playAudio_stats(String audioUrl) async {
     if (_currentPlayingAudioUrl == audioUrl) {
       // If the same audio is clicked, pause it
@@ -327,6 +328,21 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
     }
   }
 
+
+  Future<void> updateAudioCountInFirestore(int playCount) async {
+    final participantId = meeting.localParticipant
+        .id; // Retrieve participant ID
+    final DocumentReference participantDoc =
+    FirebaseFirestore.instance.collection('meeting_record')
+        .doc(meeting.id)
+        .collection('Stats')
+        .doc(participantId);
+
+    // Update the audio played count
+    await participantDoc.update({'audioPlayedCount': playCount});
+    print(
+        'Updated audio played count for participant $participantId: $playCount');
+  }
   void _stopCurrentAudio() {
     if (_currentAudioPlayer != null) {
       _currentAudioPlayer?.pause(); // Pause the current audio
@@ -336,7 +352,102 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
     }
   }
 
+ */
+  void _playAudio_broad(String audioUrl) {
+    setState(() {
+      if (_currentPlayingAudioUrl == audioUrl) {
+        _currentPlayingAudioUrl = null; // Toggle off if already playing
+      } else {
+        _currentPlayingAudioUrl = audioUrl; // Set as currently playing
+      }
+    });
+  }
+
+  /// Plays audio, updates the currently playing URL, and triggers a UI rebuild
+  /// specifically within the modal bottom sheet.
+  void _playAudio_simple(String audioUrl, StateSetter modalSetState) {
+    // Use the StateSetter passed from the StatefulBuilder
+    modalSetState(() {
+      if (_currentPlayingAudioUrl == audioUrl) {
+        // If the clicked URL is already playing, stop it (set URL to null)
+        _currentPlayingAudioUrl = null;
+        // --- Add your actual audio stop logic here ---
+        print("Stopping audio: $audioUrl");
+      } else {
+        // If a different URL is clicked, or none is playing, start the new one
+        _currentPlayingAudioUrl = audioUrl;
+        // --- Add your actual audio play logic here (start playing audioUrl) ---
+        print("Playing audio: $audioUrl");
+      }
+    });
+    // If you also need the parent widget housing the modal to rebuild for other reasons,
+    // you might call its own setState here as well, but it's not needed for the
+    // modal's internal UI update (like the play/pause button).
+    // setState(() {});
+  }
+
+  /// Plays audio, updates the currently playing URL, increments play count,
+  /// updates Firestore, and triggers a UI rebuild within the modal bottom sheet.
+  void _playAudio_stats(String audioUrl, StateSetter modalSetState) {
+    // Use the StateSetter passed from the StatefulBuilder
+    // Note: If updateAudioCountInFirestore is async, the lambda becomes async
+    modalSetState(() async { // Make the lambda async if needed
+      if (_currentPlayingAudioUrl == audioUrl) {
+        // If the clicked URL is already playing, stop it
+        _currentPlayingAudioUrl = null;
+        // --- Add your actual audio stop logic here ---
+        print("Stopping audio: $audioUrl");
+      } else {
+        // If a different URL is clicked, or none is playing, start the new one
+        final previousUrl = _currentPlayingAudioUrl; // Store previous if needed for stopping
+        _currentPlayingAudioUrl = audioUrl;
+        // --- Add your actual audio play logic here (stop previousUrl, start audioUrl) ---
+        print("Playing audio: $audioUrl");
+
+        // Increment play count and update Firestore only when starting a new audio
+        audioPlayedCount++;
+        print("Audio played count: $audioPlayedCount");
+        // Call your Firestore update function (ensure it handles errors)
+        try {
+          await updateAudioCountInFirestore(audioPlayedCount); // Assuming this exists
+          print("Firestore count updated successfully.");
+        } catch (e) {
+          print("Error updating Firestore count: $e");
+          // Handle error appropriately (e.g., show a snackbar)
+        }
+      }
+    });
+    // Again, only call parent's setState if the parent widget itself needs to react
+    // setState(() {});
+  }
+
+
+
+  Future<void> updateAudioCountInFirestore(int playCount) async {
+    final participantId = meeting.localParticipant.id;
+    final DocumentReference participantDoc =
+    FirebaseFirestore.instance.collection('meeting_record')
+        .doc(meeting.id)
+        .collection('Stats')
+        .doc(participantId);
+
+    await participantDoc.update({'audioPlayedCount': playCount});
+    print('Updated audio played count for participant $participantId: $playCount');
+  }
+
+
+
   Future<void> storeParticipantStats() async {
+    final roleProvider = Provider.of<RoleProvider>(context, listen: false);
+    String role = roleProvider.isTeacher
+        ? 'Teacher'
+        : roleProvider.isStudent
+        ? 'Student'
+        : roleProvider.isPrincipal
+        ? 'Principal'
+        : 'Parents';
+
+
     final participantId = meeting.localParticipant
         .id; // Retrieve participant ID
 
@@ -345,6 +456,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       'joinTime': FieldValue.serverTimestamp(),
       // Store current time as a Timestamp
       'audioPlayedCount': 0,
+      'role': role,
       // Initialize audio played count to zero
       'Q_marks': 20,
       // Initialize quiz marks
@@ -367,22 +479,6 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       print('Error saving participant stats: $e');
     }
   }
-
-  Future<void> updateAudioCountInFirestore(int playCount) async {
-    final participantId = meeting.localParticipant
-        .id; // Retrieve participant ID
-    final DocumentReference participantDoc =
-    FirebaseFirestore.instance.collection('meeting_record')
-        .doc(meeting.id)
-        .collection('Stats')
-        .doc(participantId);
-
-    // Update the audio played count
-    await participantDoc.update({'audioPlayedCount': playCount});
-    print(
-        'Updated audio played count for participant $participantId: $playCount');
-  }
-
   @override
   Widget build(BuildContext context) {
     final principalProvider = Provider.of<PrincipalProvider>(context);
@@ -410,15 +506,12 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
               // AppBar based on platform
               !isWebMobile &&
                   (kIsWeb || Platform.isMacOS || Platform.isWindows)
-                  ? WebMeetingAppBar(
+                  ? MeetingAppBar_web(
                 meeting: meeting,
                 token: widget.token,
                 recordingState: recordingState,
-                isMicEnabled: audioStream != null,
-                isCamEnabled: videoStream != null,
-                isLocalScreenShareEnabled: shareStream != null,
-                isRemoteScreenShareEnabled:
-                remoteParticipantShareStream != null,
+                isFullScreen: fullScreen,
+
               )
                   : MeetingAppBar(
                 meeting: meeting,
@@ -432,9 +525,9 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 16.0),
                 child: Text(
                   'Remaining Time: $_remainingMinutes minutes',
-                  style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
+                  style: GoogleFonts.quicksand(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
                     color: Colors.white,
                   ),
                 ),
@@ -442,13 +535,12 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
               Divider(color: Colors.grey[700], height: 1),
 
         Expanded(
+          flex: 4,
                 child: Container(
+                  height: 500,
                   margin: const EdgeInsets.symmetric(
                       horizontal: 10.0, vertical: 8.0),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[850],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+
                   child: ConferenceParticipantGrid(meeting: meeting),
                 ),
               ),
@@ -459,7 +551,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 20.0),
                 child: Text(
                   'No Announcements Made Till Now.',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.quicksand(
                     fontSize: 16,
                     color: Colors.grey[400],
                     fontWeight: FontWeight.w500,
@@ -489,9 +581,9 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                           children: [
                             Text(
                               'Coordinator: ${broadcast['coordinator']}',
-                              style: GoogleFonts.poppins(
+                              style: GoogleFonts.quicksand(
                                 fontSize: 12,
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.w700,
                                 color: Colors.black87,
                               ),
                             ),
@@ -506,12 +598,8 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                                         top: 5.0),
                                     child: AudioPlayerWidget(
                                       audioUrl: audioUrl,
-                                      onPlay: () =>
-                                          _playAudio_simple(audioUrl),
-                                      onStop: _stopCurrentAudio,
-                                      isPlaying:
-                                      _currentPlayingAudioUrl ==
-                                          audioUrl,
+                                      onPlay: () => _playAudio_broad(audioUrl),
+                                      isPlaying: _currentPlayingAudioUrl == audioUrl,
                                     ),
                                   );
                                 }).toList(),
@@ -526,55 +614,78 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
 
               // Conference Participants
               Divider(color: Colors.grey[700], height: 1),
-
-
-              // Action Buttons for Bottom Sheets
+// Action Buttons for Bottom Sheets
               Padding(
                 padding: const EdgeInsets.all(10.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  mainAxisSize: MainAxisSize.max,
-                  children: [
-                    _buildActionButton(
-                      context: context,
-                      icon: Icons.book,
-                      label: 'Lectures',
-                      onPressed: () => Lecture_button_Conditional_Trigger(context),
-                    ),
-                    _buildActionButton(
-                      context: context,
-                      icon: Icons.quiz,
-                      label: 'Quiz',
-                      onPressed: () => _showQuizBottomSheet(context),
-                    ),
+                child: Consumer<RoleProvider>(
+                  builder: (context, roleProvider, child) {
+                    List<Widget> buttons = [];
 
-                    Consumer<RoleProvider>(
-                      builder: (context, roleProvider, child) {
-                        if (roleProvider.isPrincipal) {
-                          return _buildActionButton(
-                            context: context,
-                            icon: Icons.video_call,
-                            label: 'Create',
-                            onPressed: () async {
-                              meeting.leave();
-                              Future.delayed(
-                                  const Duration(milliseconds: 500), () {
-                                Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (context) =>
-                                          TeacherScreen()),
-                                );
-                              });
-                            },
-                          );
-                        }
-                        return const SizedBox.shrink();
-                      },
-                    ),
-                  ],
+                    // Teacher: Show only "Lectures"
+                    if (roleProvider.isTeacher) {
+                      buttons.add(
+                        _buildActionButton(
+                          context: context,
+                          icon: Icons.book,
+                          label: 'Lectures',
+                          onPressed: () => Lecture_button_Conditional_Trigger(context),
+                        ),
+                      );
+                    }
+
+                    // Student: Show "Lectures" + "Quiz"
+                    if (roleProvider.isStudent) {
+                      buttons.addAll([
+                        _buildActionButton(
+                          context: context,
+                          icon: Icons.book,
+                          label: 'Lectures',
+                          onPressed: () => Lecture_button_Conditional_Trigger(context),
+                        ),
+                        _buildActionButton(
+                          context: context,
+                          icon: Icons.quiz,
+                          label: 'Quiz',
+                          onPressed: () => _showQuizBottomSheet(context),
+                        ),
+                      ]);
+                    }
+
+                    // Principal: Show "Lectures" + "Create"
+                    if (roleProvider.isPrincipal) {
+                      buttons.addAll([
+                        _buildActionButton(
+                          context: context,
+                          icon: Icons.book,
+                          label: 'Lectures',
+                          onPressed: () => Lecture_button_Conditional_Trigger(context),
+                        ),
+                        _buildActionButton(
+                          context: context,
+                          icon: Icons.video_call,
+                          label: 'Room List',
+                          onPressed: () async {
+                            meeting.leave();
+                            Future.delayed(const Duration(milliseconds: 500), () {
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(builder: (context) => TeacherScreen()),
+                              );
+                            });
+                          },
+                        ),
+                      ]);
+                    }
+
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      mainAxisSize: MainAxisSize.max,
+                      children: buttons,
+                    );
+                  },
                 ),
               ),
+
 
               // Meeting Action Bar
               AnimatedCrossFade(
@@ -607,12 +718,16 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                     onCallLeaveButtonPressed: () {
                       meeting.leave();
                       Future.delayed(const Duration(milliseconds: 500), () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => SplashScreen()),
-                        );
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) {
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(builder: (context) => SplashScreen()),
+                            );
+                          }
+                        });
                       });
+
                     },
                     onMicButtonPressed: () {
                       if (audioStream != null) {
@@ -621,6 +736,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                         meeting.unmuteMic();
                       }
                     },
+
                     onCameraButtonPressed: () {
                       if (videoStream != null) {
                         meeting.disableCam();
@@ -660,7 +776,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                                   const EdgeInsets.fromLTRB(16, 10, 5, 10),
                                   child: Text(
                                     e.label,
-                                    style: GoogleFonts.poppins(
+                                    style: GoogleFonts.quicksand(
                                       color: Colors.white,
                                       fontSize: 14,
                                     ),
@@ -755,12 +871,12 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       style: ElevatedButton.styleFrom(
         backgroundColor: Colors.grey[800],
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        padding: const EdgeInsets.symmetric(horizontal: 46, vertical: 15),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
       ),
       icon: Icon(icon, color: Colors.white, size: 20),
       label: Text(
         label,
-        style: GoogleFonts.poppins(
+        style: GoogleFonts.quicksand(
           fontSize: 14,
           fontWeight: FontWeight.w500,
           color: Colors.white,
@@ -768,279 +884,242 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       ),
     );
   }
+
+
   void Lecture_button_Conditional_Trigger(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent, // Makes background seamless
-      builder: (context) =>Container(
-        height: MediaQuery.of(context).size.height * 0.4,
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-            Container(
-              padding: const EdgeInsets.all(16.0),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              child: Consumer<RoleProvider>(
-                builder: (context, roleProvider, child) {
-                  if (roleProvider.isTeacher) {
-                    return Teacher_Lecture_card(context);
-                  } else if (roleProvider.isStudent) {
-                    return Student_Lecture_card(context);
-                  }
-                  return const SizedBox.shrink();
-                },
-              ),
+      backgroundColor: Colors.white,
+      builder: (context) => StatefulBuilder( // Gives us bottomSheetSetState
+        builder: (BuildContext context, StateSetter bottomSheetSetState) {
+          return Container(
+            // Make height dynamic or sufficient
+            height: MediaQuery.of(context).size.height * 0.6, // Adjusted height maybe?
+            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Consumer<RoleProvider>(
+                  builder: (context, roleProvider, child) {
+                    if (roleProvider.isTeacher || roleProvider.isPrincipal) {
+                      // Pass the modal's setState and the current URL down
+                      return Teacher_Lecture_card(
+                        context,
+                        _currentPlayingAudioUrl,
+                            (audioUrl) => _playAudio_simple(audioUrl, bottomSheetSetState), // Pass the playback function correctly
+                      );
+                    } else if (roleProvider.isStudent) {
+                      // Pass the modal's setState and the current URL down
+                      return Student_Lecture_card(
+                        context,
+                        _currentPlayingAudioUrl, // Pass current URL for isPlaying check
+                            (audioUrl) => _playAudio_stats(audioUrl, bottomSheetSetState), // Pass the playback function correctly
+                      );
+                    }
+                    return const SizedBox.shrink(); // Fallback
+                  },
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
 
-// Teacher Lectures List (extracted from original UI)
-  Widget Teacher_Lecture_card(BuildContext context) {
-    return
-        Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('Study_material').snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                return Center(
-                  child: Text(
-                    'No lectures found.',
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                );
-              }
-              final lectureDocs = snapshot.data!.docs;
-              return ListView.builder(
-                shrinkWrap: true,
-                itemCount: lectureDocs.length,
-                itemBuilder: (context, index) {
-                  final lecture = lectureDocs[index];
-                  final lectureName = lecture['TopicName'] ?? 'No Name';
-                  final lectureDescription =
-                      lecture['TopicDescription'] ?? 'No Description';
-                  final audioFiles = lecture['AudioFiles'] ?? [];
-                  final status = lecture['Status'] ?? 'Approved';
-                  return Card(
-                    color: Colors.white,
-                    margin: const EdgeInsets.only(bottom: 8.0),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    elevation: 0,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Lecture Name',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 12,
-                                      color: Colors.grey,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  Text(
-                                    lectureName,
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Row(
-                                children: [
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blue[700],
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 8,
-                                      ),
-                                    ),
-                                    onPressed: () {},
-                                    child: Text(
-                                      status,
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                  IconButton(
-                                    onPressed: () async {
-                                      await FirebaseFirestore.instance
-                                          .collection('Study_material')
-                                          .doc(lecture.id)
-                                          .delete();
-                                    },
-                                    icon: const Icon(
-                                      Icons.delete,
-                                      color: Colors.red,
-                                      size: 24,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Lecture Description',
-                            style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              color: Colors.grey,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          Text(
-                            lectureDescription,
-                            style: GoogleFonts.poppins(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          if (audioFiles.isNotEmpty)
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Lecture Audio Files',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 12,
-                                    color: Colors.grey,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                ...List<Widget>.generate(audioFiles.length,
-                                        (audioIndex) {
-                                      final audioUrl = audioFiles[audioIndex];
-                                      return Padding(
-                                        padding: const EdgeInsets.only(top: 8.0),
 
-                                        child: AudioPlayerWidget(
-                                          audioUrl: audioUrl,
-                                          onPlay: () => _playAudio_simple(audioUrl),
-                                          onStop: _stopCurrentAudio,
-                                          isPlaying:
-                                          _currentPlayingAudioUrl == audioUrl,
-                                        ),
-                                      );
-                                    }),
-                              ],
-                            ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
 
-    );
-  }
-// Student Lectures List (extracted from original UI)
-  Widget Student_Lecture_card(BuildContext context) {
-    final principalProvider = Provider.of<PrincipalProvider>(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-
-        Expanded(
-          child: principalProvider.teacherCards.isEmpty
-              ? Center(
-            child: Text(
-              'No approved content available.',
-              style: GoogleFonts.poppins(
-                fontSize: 16,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
+  Widget Teacher_Lecture_card(
+      BuildContext context,
+      String? currentPlayingAudioUrl,
+      Function(String) onPlayAudio, // Accepts the function to call on play
+      ) {
+    // Keep height calculation or consider Flexible/Expanded if needed
+        return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.4,
+      child: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('Study_material').snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return Center(
+              child: Text(
+                'No lectures found.',
+                style: GoogleFonts.quicksand(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.grey[600]),
               ),
-            ),
-          )
-              : ListView.builder(
-            physics: const NeverScrollableScrollPhysics(),
+            );
+          }
+          final lectureDocs = snapshot.data!.docs;
+          return ListView.builder(
             shrinkWrap: true,
-            itemCount: principalProvider.teacherCards.length,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.only(bottom: 8.0),
+            itemCount: lectureDocs.length,
             itemBuilder: (context, index) {
-              final card = principalProvider.teacherCards[index];
+              final lecture = lectureDocs[index];
+              final lectureName = lecture['TopicName'] ?? 'No Name';
+              final lectureDescription = lecture['TopicDescription'] ?? 'No Description';
+              final audioFiles = lecture['AudioFiles'] ?? [];
+              final status = lecture['Status'] ?? 'Approved';
               return Card(
-                  color: Colors.white,
-                  margin: const EdgeInsets.only(bottom: 8.0),
-              shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
-              ),
-              elevation: 0,
+                elevation: 0,
+                color: Colors.white,
+                margin: const EdgeInsets.only(bottom: 6.0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.all(8.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'List Of Lectures',
-                        style: GoogleFonts.poppins(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      if (card['audioFiles'].isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12.0),
-                          child: Column(
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: card['audioFiles'].map<Widget>((audioUrl) {
-                              return AudioPlayerWidget(
-                                audioUrl: audioUrl,
-                                onPlay: () => _playAudio_stats(audioUrl),
-                                onStop: _stopCurrentAudio,
-                                isPlaying: _currentPlayingAudioUrl == audioUrl,
-                              );
-                            }).toList(),
+                            children: [
+                              Text('Lecture Name', style: GoogleFonts.quicksand(fontSize: 12, color: Colors.grey)),
+                              Text(lectureName, style: GoogleFonts.quicksand(fontSize: 14, fontWeight: FontWeight.w700)),
+                            ],
                           ),
+                          Row(
+                            children: [
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue[700],
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                ),
+                                onPressed: () {},
+                                child: Text(status, style: GoogleFonts.quicksand(fontSize: 12, color: Colors.white)),
+                              ),
+                              IconButton(
+                                onPressed: () async {
+                                  await FirebaseFirestore.instance.collection('Study_material').doc(lecture.id).delete();
+                                },
+                                icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text('Lecture Description', style: GoogleFonts.quicksand(fontSize: 12, color: Colors.grey)),
+                      Text(lectureDescription, style: GoogleFonts.quicksand(fontSize: 14, fontWeight: FontWeight.w500)),
+                      if (audioFiles.isNotEmpty)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 6),
+                            Text('Lecture Audio Files', style: GoogleFonts.quicksand(fontSize: 12, color: Colors.grey)),
+                            // Use the passed down state and function
+                            ...audioFiles.map<Widget>((audioUrl) => Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+
+                              child: AudioPlayerWidget(
+                                audioUrl: audioUrl,
+                                // Call the passed function, which handles state update
+                                onPlay: () => onPlayAudio(audioUrl),
+                                isPlaying: currentPlayingAudioUrl == audioUrl,
+                              ),
+
+
+                            )),
+                          ],
                         ),
                     ],
                   ),
                 ),
               );
             },
-          ),
-        ),
-      ],
+          );
+        },
+      ),
     );
   }
-// Updated Create More Button UI
+
+
+  Widget Student_Lecture_card(
+      BuildContext context,
+      String? currentPlayingAudioUrl, // Receive current URL
+      Function(String) onPlayAudio, // Receive the playback function
+      ) {
+    // Use watch or select for more fine-grained updates if needed
+    final principalProvider = Provider.of<PrincipalProvider>(context);
+
+    // Ensure the height is appropriate or use Flexible/Expanded
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.5, // Adjust as needed
+      child: principalProvider.teacherCards.isEmpty
+          ? Center(
+        child: Text(
+          'No approved content available.',
+          style: GoogleFonts.quicksand(fontSize: 14, color: Colors.grey[600], fontWeight: FontWeight.w500),
+        ),
+      )
+          : ListView.builder(
+        // Consider shrinkWrap: true,
+        padding: const EdgeInsets.only(bottom: 38.0), // Check if this padding is necessary
+        itemCount: principalProvider.teacherCards.length,
+        itemBuilder: (context, index) {
+          final card = principalProvider.teacherCards[index];
+          // Ensure audioFiles is treated as a list of strings
+          final audioFiles = List<String>.from(card['audioFiles'] as List? ?? []);
+
+          return Card(
+            // ... (Card styling remains the same) ...
+            elevation: 0,
+            color: Colors.white,
+            margin: const EdgeInsets.only(bottom: 6.0),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('List Of Lectures', style: GoogleFonts.quicksand(fontSize: 16, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 6), // Add some spacing
+                  if (audioFiles.isNotEmpty)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: audioFiles.map<Widget>((audioUrl) {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: AudioPlayerWidget(
+                            audioUrl: audioUrl,
+                            // Use the passed function
+                            onPlay: () => onPlayAudio(audioUrl),
+                            // Use the passed state variable
+                            isPlaying: currentPlayingAudioUrl == audioUrl,
+                          ),
+                        );
+                      }).toList(), // Ensure it's a List<Widget>
+                    )
+                  else
+                    Padding( // Indicate if no audio files for this card
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Text(
+                        'No audio files for this lecture.',
+                        style: GoogleFonts.quicksand(fontSize: 12, color: Colors.grey),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // Updated Create More Button UI
   Widget buildCreateMoreButton() {
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
@@ -1058,10 +1137,10 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       ),
       label: Text(
         "Create More Rooms",
-        style: GoogleFonts.poppins(
+        style: GoogleFonts.quicksand(
           fontSize: 16,
           color: Colors.white,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
         ),
       ),
       onPressed: () async {
@@ -1099,9 +1178,9 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
           children: [
             Text(
               'Quiz Screen',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.quicksand(
                 fontSize: 22,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
                 color: Colors.black87,
               ),
             ),
@@ -1125,9 +1204,9 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
           children: [
             Text(
               'Audio List',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.quicksand(
                 fontSize: 22,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
                 color: Colors.black87,
               ),
             ),
@@ -1141,8 +1220,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
                     child: AudioPlayerWidget(
                       audioUrl: audioUrl,
-                      onPlay: () => _playAudio_simple(audioUrl),
-                      onStop: _stopCurrentAudio,
+                      onPlay: () => _playAudio_broad(audioUrl),
                       isPlaying: _currentPlayingAudioUrl == audioUrl,
                     ),
                   );
@@ -1482,8 +1560,8 @@ class _QuizWidgetState extends State<QuizWidget> {
         builder: (context) => AlertDialog(
           title: Text(
             'Quiz Completed',
-            style: GoogleFonts.poppins(
-                fontSize: 18, fontWeight: FontWeight.w600, color: Colors.black),
+            style: GoogleFonts.quicksand(
+                fontSize: 18, fontWeight: FontWeight.w700, color: Colors.black),
           ),
           content: const Text('You have finished the quiz.'),
           actions: [
@@ -1499,9 +1577,9 @@ class _QuizWidgetState extends State<QuizWidget> {
               },
               child: Text(
                 'Restart',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.quicksand(
                   fontSize: 18,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
@@ -1529,10 +1607,10 @@ class _QuizWidgetState extends State<QuizWidget> {
               children: [
                 Text(
                   'Time Remaining: $_remainingTime seconds',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.quicksand(
                     fontSize: 16,
                     color: Colors.redAccent,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -1550,10 +1628,10 @@ class _QuizWidgetState extends State<QuizWidget> {
                           children: [
                             Text(
                               question['question'],
-                              style: GoogleFonts.poppins(
+                              style: GoogleFonts.quicksand(
                                 fontSize: 16,
                                 color: Colors.black87,
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                             const SizedBox(height: 20),
@@ -1595,7 +1673,7 @@ class _QuizWidgetState extends State<QuizWidget> {
                                     child: Text(
                                       choice,
                                       textAlign: TextAlign.center,
-                                      style: GoogleFonts.poppins(
+                                      style: GoogleFonts.quicksand(
                                         fontSize: 16,
                                         color: isSelected
                                             ? Colors.white
@@ -1620,10 +1698,10 @@ class _QuizWidgetState extends State<QuizWidget> {
             Center(
               child: Text(
                 'Quiz is Based on Lecture #01',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.quicksand(
                   fontSize: 14,
                   color: Colors.black87,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
@@ -1641,10 +1719,10 @@ class _QuizWidgetState extends State<QuizWidget> {
                 ),
                 child: Text(
                   'Start Quiz',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.quicksand(
                     fontSize: 18,
                     color: Colors.white,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
@@ -1751,7 +1829,7 @@ class _Create_LectureState extends State<Create_lecture> {
         content: Text(
           message,
           style: TextStyle(
-            fontFamily: GoogleFonts.poppins().fontFamily,
+            fontFamily: GoogleFonts.quicksand().fontFamily,
             fontSize: 16,
             color: Colors.white,
             fontWeight: FontWeight.w500,
@@ -1797,7 +1875,7 @@ class _Create_LectureState extends State<Create_lecture> {
           ),
           title: Text(
             "Upload Lectures",
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.quicksand(
               fontSize: 18,
               fontWeight: FontWeight.w400,
               color: Colors.white,
@@ -1879,7 +1957,7 @@ class _Create_LectureState extends State<Create_lecture> {
                               _selectedFiles.isNotEmpty
                                   ? "${_selectedFiles.length} file(s) selected"
                                   : "Study Material(s)",
-                              style: GoogleFonts.poppins(
+                              style: GoogleFonts.quicksand(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w400,
                                 color: Colors.black,
@@ -1907,7 +1985,7 @@ class _Create_LectureState extends State<Create_lecture> {
                         ),
                         child: Text(
                           _isUploading ? "Submitting..." : "Upload",
-                          style: GoogleFonts.poppins(
+                          style: GoogleFonts.quicksand(
                             fontSize: 18,
                             fontWeight: FontWeight.w400,
                             color: const Color(0xFFFFFFFF),

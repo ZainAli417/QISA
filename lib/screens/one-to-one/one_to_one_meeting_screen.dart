@@ -127,15 +127,11 @@ class _OneToOneMeetingScreenState extends State<OneToOneMeetingScreen> {
                     children: [
                       !isWebMobile &&
                               (kIsWeb || Platform.isMacOS || Platform.isWindows)
-                          ? WebMeetingAppBar(
-                              meeting: meeting,
-                              token: widget.token,
-                              recordingState: recordingState,
-                              isMicEnabled: audioStream != null,
-                              isCamEnabled: videoStream != null,
-                              isLocalScreenShareEnabled: shareStream != null,
-                              isRemoteScreenShareEnabled:
-                                  remoteParticipantShareStream != null,
+                          ? MeetingAppBar_web(
+                        meeting: meeting,
+                        token: widget.token,
+                        recordingState: recordingState,
+                        isFullScreen: fullScreen,
                             )
                           : MeetingAppBar(
                               meeting: meeting,

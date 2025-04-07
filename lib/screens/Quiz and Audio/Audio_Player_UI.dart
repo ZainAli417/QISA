@@ -4,15 +4,13 @@ import 'package:google_fonts/google_fonts.dart';
 
 class AudioPlayerWidget extends StatefulWidget {
   final String audioUrl;
-  final VoidCallback onPlay; // Callback to handle play action
-  final VoidCallback onStop; // Callback to handle play action
-  final bool isPlaying; // Track if this audio is currently playing
+  final VoidCallback onPlay; // Callback to trigger play action.
+  final bool isPlaying; // Indicates if this audio should be playing.
 
   const AudioPlayerWidget({
     Key? key,
     required this.audioUrl,
     required this.onPlay,
-    required this.onStop,
     required this.isPlaying,
   }) : super(key: key);
 
@@ -28,7 +26,34 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
   void initState() {
     super.initState();
     _audioPlayer = AudioPlayer();
-    _audioPlayer.setUrl(widget.audioUrl);
+    _initAudioPlayer();
+  }
+
+  Future<void> _initAudioPlayer() async {
+    try {
+      await _audioPlayer.setUrl(widget.audioUrl);
+    } catch (e) {
+      print("Error loading audio source: $e");
+      // Handle error appropriately, e.g., show an error message
+    }
+  }
+
+  // Use didUpdateWidget to trigger play/pause based on the isPlaying prop.
+  @override
+  void didUpdateWidget(covariant AudioPlayerWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.audioUrl != oldWidget.audioUrl) {
+      _initAudioPlayer(); // Reload audio if the URL changes
+    }
+    _handlePlayPause();
+  }
+
+  void _handlePlayPause() {
+    if (widget.isPlaying) {
+      _audioPlayer.play();
+    } else {
+      _audioPlayer.pause();
+    }
   }
 
   @override
@@ -37,35 +62,16 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
     super.dispose();
   }
 
-  Future<void> _playAudio() async {
-    if (_audioPlayer.playing) return; // Prevent duplicate play calls
-    await _audioPlayer.play();
-  }
-
-  Future<void> _pauseAudio() async {
-    if (!_audioPlayer.playing) return; // Prevent duplicate pause calls
-    await _audioPlayer.pause();
-  }
-
-  @override
   @override
   Widget build(BuildContext context) {
-    // Synchronize the audio player with the parent's isPlaying state
-    if (widget.isPlaying) {
-      _playAudio();
-    } else {
-      _pauseAudio();
-    }
-
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white, // Background color
-        borderRadius: BorderRadius.circular(25), // Rounded corners
+        color: Colors.white, // Background color.
+        borderRadius: BorderRadius.circular(25), // Rounded corners.
         border: Border.all(
-          color: Colors.grey.shade400, // Border color
-          width: 2, // Border width
+          color: Colors.grey.shade400, // Border color.
+          width: 2, // Border width.
         ),
-
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Row(
@@ -79,7 +85,7 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
               size: 30,
             ),
             onPressed: () {
-              widget.isPlaying ? widget.onStop() : widget.onPlay();
+              widget.onPlay();
             },
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -90,7 +96,6 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
               builder: (context, snapshot) {
                 final currentPosition = snapshot.data ?? Duration.zero;
                 final totalDuration = _audioPlayer.duration ?? Duration.zero;
-
                 return SliderTheme(
                   data: const SliderThemeData(
                     trackHeight: 5,
@@ -120,7 +125,8 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
               setState(() {
                 _isLooping = !_isLooping;
               });
-              await _audioPlayer.setLoopMode(_isLooping ? LoopMode.one : LoopMode.off);
+              await _audioPlayer.setLoopMode(
+                  _isLooping ? LoopMode.one : LoopMode.off);
             },
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -131,7 +137,6 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
               final currentPosition = snapshot.data ?? Duration.zero;
               final totalDuration = _audioPlayer.duration ?? Duration.zero;
               final remainingTime = totalDuration - currentPosition;
-
               return Padding(
                 padding: const EdgeInsets.only(left: 8),
                 child: Text(
@@ -151,8 +156,10 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
   }
 
   String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    final minutes =
+    duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds =
+    duration.inSeconds.remainder(60).toString().padLeft(2, '0');
     return "$minutes:$seconds";
   }
 }

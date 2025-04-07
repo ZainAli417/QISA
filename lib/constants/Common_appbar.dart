@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:videosdk_flutter_example/utils/api.dart';
-import 'package:videosdk_flutter_example/utils/toast.dart';
 
 mixin MeetingAppBarLogic<T extends StatefulWidget> on State<T> {
   Duration? elapsedTime;
@@ -24,6 +22,10 @@ mixin MeetingAppBarLogic<T extends StatefulWidget> on State<T> {
           List<dynamic> fetchedTeachers = data['teacher_list'];
           setState(() {
             teacherList = List<String>.from(fetchedTeachers);
+            // If selectedTeacher is null and list is not empty, set to first teacher
+            if (selectedTeacher == null && teacherList.isNotEmpty) {
+              selectedTeacher = teacherList[0];
+            }
           });
         }
       }
@@ -32,20 +34,17 @@ mixin MeetingAppBarLogic<T extends StatefulWidget> on State<T> {
     }
   }
 
-
-  /// Saves the assigned teacher data.
-  void savedata(String teacher, String meetingId) async {
+  /// Saves the assigned teacher data with null checks and merge option.
+  void savedata(String? teacher, String meetingId) async {
     try {
       await FirebaseFirestore.instance.collection('meeting_record').doc(meetingId).set({
-        'assigned_to': teacher,
-        'room_id': meetingId,
+        'assigned_to': teacher ?? 'Unassigned',
+        'room_id': meetingId ?? 'Unknown',
         'room_name': 'Zain Ali',
-        'elapsed_time': elapsedTime?.inMinutes ?? 'Progress',
-      });
+        'elapsed_time': elapsedTime?.inMinutes.toString() ?? '0',
+      }, SetOptions(merge: true)); // Merge to update instead of overwrite
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Meeting assigned to $teacher')),
-      );
+
     } catch (e) {
       print('Error assigning meeting: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -53,8 +52,6 @@ mixin MeetingAppBarLogic<T extends StatefulWidget> on State<T> {
       );
     }
   }
-
-
 
   @override
   void dispose() {

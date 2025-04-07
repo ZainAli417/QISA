@@ -34,20 +34,37 @@ class MeetingAppBar extends StatefulWidget {
 
 class MeetingAppBarState extends State<MeetingAppBar>
     with MeetingAppBarLogic<MeetingAppBar> {
-  String? selectedTeacher;
-  List<String> teacherList = [];
   List<VideoDeviceInfo>? cameras = [];
 
   @override
   void initState() {
     super.initState();
-    fetchTeachers(widget.meeting.id);
+    fetchTeachers(widget.meeting.id); // Fetch teachers asynchronously
     fetchVideoDevices();
+    // Auto-trigger savedata only if the user is a principal
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _autoSaveInitialData();
+    });
   }
 
   void fetchVideoDevices() async {
     cameras = await VideoSDK.getVideoDevices();
     setState(() {});
+  }
+
+  // Handle initial auto-save only for principal
+  void _autoSaveInitialData() {
+    final roleProvider = Provider.of<RoleProvider>(context, listen: false);
+    if (!roleProvider.isPrincipal) return; // Only proceed if principal
+
+    // Use the first teacher if list is populated; otherwise, save with null (Unassigned in savedata)
+    final initialTeacher = teacherList.isNotEmpty ? teacherList[0] : null;
+    if (teacherList.isNotEmpty) {
+      setState(() {
+        selectedTeacher = initialTeacher; // Set the selected teacher if available
+      });
+    }
+    savedata(initialTeacher, widget.meeting.id); // Save the data (null if no teachers available)
   }
 
   @override
@@ -75,14 +92,12 @@ class MeetingAppBarState extends State<MeetingAppBar>
                 if (roleProvider.isPrincipal) {
                   Navigator.pushReplacement(
                     context,
-                    MaterialPageRoute(
-                        builder: (context) => TeacherScreen()),
+                    MaterialPageRoute(builder: (context) => TeacherScreen()),
                   );
                 } else {
                   Navigator.pushReplacement(
                     context,
-                    MaterialPageRoute(
-                        builder: (context) => SplashScreen()),
+                    MaterialPageRoute(builder: (context) => SplashScreen()),
                   );
                 }
               },
@@ -111,7 +126,8 @@ class MeetingAppBarState extends State<MeetingAppBar>
                       GestureDetector(
                         child: const Padding(
                           padding: EdgeInsets.fromLTRB(8, 0, 0, 0),
-                          child: Icon(Icons.copy, size: 16, color: Colors.white),
+                          child: Icon(Icons.copy,
+                              size: 16, color: Colors.white),
                         ),
                         onTap: () {
                           Clipboard.setData(
@@ -165,10 +181,10 @@ class MeetingAppBarState extends State<MeetingAppBar>
                             );
                           }).toList(),
                           onChanged: (String? newValue) {
-                            setState(() {
-                              selectedTeacher = newValue;
-                            });
                             if (newValue != null) {
+                              setState(() {
+                                selectedTeacher = newValue;
+                              });
                               savedata(newValue, widget.meeting.id);
                             }
                           },

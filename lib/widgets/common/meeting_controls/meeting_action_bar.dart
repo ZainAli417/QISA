@@ -75,24 +75,35 @@ class MeetingActionBar extends StatelessWidget {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  onSelected: (value) {
+                  onSelected: (value) async {
+                    // Update inmeeting status to false for this participant
+                    try {
+                      await FirebaseFirestore.instance
+                          .collection('meeting_record')
+                          .doc(meeting.id)
+                          .collection('Stats')
+                          .doc(participantId) // Use the participant ID of the teacher/principal
+                          .update({'inmeeting': false});
+                    } catch (e) {
+                      print("Error updating inmeeting status: $e");
+                    }
+
                     if (value == "leave") {
                       onCallLeaveButtonPressed();
                     } else if (value == "end") {
                       onCallEndButtonPressed();
                     }
-                    // After leaving or ending, navigate based on role.
+
+                    // Navigate based on role after leaving or ending
                     if (roleProvider.isTeacher) {
                       Navigator.pushReplacement(
                         context,
-                        MaterialPageRoute(
-                            builder: (context) => SplashScreen()),
+                        MaterialPageRoute(builder: (context) => SplashScreen()),
                       );
                     } else if (roleProvider.isPrincipal) {
                       Navigator.pushReplacement(
                         context,
-                        MaterialPageRoute(
-                            builder: (context) => TeacherScreen()),
+                        MaterialPageRoute(builder: (context) => TeacherScreen()),
                       );
                     }
                   },
@@ -120,7 +131,7 @@ class MeetingActionBar extends StatelessWidget {
           // Student Leave Button
           Consumer<RoleProvider>(
             builder: (context, roleProvider, child) {
-              if (roleProvider.isStudent) {
+              if (roleProvider.isStudent ) {
                 return ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.red,
