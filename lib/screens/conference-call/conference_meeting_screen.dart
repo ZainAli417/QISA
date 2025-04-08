@@ -88,7 +88,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
   bool isTeacher = false;
   bool isStudent = false;
   bool isPrincipal = false;
-
+  bool isLocalMicEnabled = false;
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -106,7 +106,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
   @override
   void initState() {
     super.initState();
-
+    isLocalMicEnabled = audioStream != null;
     // Set device orientations first
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -698,7 +698,8 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                   padding: const EdgeInsets.all(8.0),
                   color: Colors.grey[900],
                   child: MeetingActionBar(
-                    isMicEnabled: audioStream != null,
+                    // Use the local state instead of checking audioStream directly
+                    isMicEnabled: isLocalMicEnabled,
                     meeting: meeting,
                     isCamEnabled: videoStream != null,
                     isScreenShareEnabled: shareStream != null,
@@ -727,16 +728,20 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                           }
                         });
                       });
-
                     },
+                    // Updated mic control callback
                     onMicButtonPressed: () {
-                      if (audioStream != null) {
-                        meeting.muteMic();
-                      } else {
+                      setState(() {
+                        // Toggle the local mic state first
+                        isLocalMicEnabled = !isLocalMicEnabled;
+                      });
+                      // Then, call the meeting methods based on the updated state
+                      if (isLocalMicEnabled) {
                         meeting.unmuteMic();
+                      } else {
+                        meeting.muteMic();
                       }
                     },
-
                     onCameraButtonPressed: () {
                       if (videoStream != null) {
                         meeting.disableCam();
