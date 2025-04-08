@@ -735,6 +735,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                         // Toggle the local mic state first
                         isLocalMicEnabled = !isLocalMicEnabled;
                       });
+
                       // Then, call the meeting methods based on the updated state
                       if (isLocalMicEnabled) {
                         meeting.unmuteMic();
