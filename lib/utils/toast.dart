@@ -4,7 +4,7 @@ import 'package:videosdk_flutter_example/constants/colors.dart';
 void showSnackBarMessage(
     {required String message,
     Widget? icon,
-    Color messageColor = black900,
+    Color messageColor = Colors.redAccent,
     required BuildContext context}) {
   ScaffoldMessenger.of(context).removeCurrentSnackBar();
 

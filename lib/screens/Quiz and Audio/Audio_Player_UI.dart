@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 class AudioPlayerWidget extends StatefulWidget {
   final String audioUrl;
-  final VoidCallback onPlay; // Callback to trigger play action.
+  final VoidCallback onPlay; // Callback to trigger parent's state update.
   final bool isPlaying; // Indicates if this audio should be playing.
 
   const AudioPlayerWidget({
@@ -31,21 +31,25 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
 
   Future<void> _initAudioPlayer() async {
     try {
+      // setUrl returns the duration if available.
       await _audioPlayer.setUrl(widget.audioUrl);
+      setState(() {}); // Refresh to update slider if duration is loaded.
     } catch (e) {
       print("Error loading audio source: $e");
-      // Handle error appropriately, e.g., show an error message
     }
   }
 
-  // Use didUpdateWidget to trigger play/pause based on the isPlaying prop.
   @override
   void didUpdateWidget(covariant AudioPlayerWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // If the audio URL changes, reload the audio.
     if (widget.audioUrl != oldWidget.audioUrl) {
-      _initAudioPlayer(); // Reload audio if the URL changes
+      _initAudioPlayer();
     }
-    _handlePlayPause();
+    // Only trigger play/pause if the playing state has changed.
+    if (widget.isPlaying != oldWidget.isPlaying) {
+      _handlePlayPause();
+    }
   }
 
   void _handlePlayPause() {
@@ -53,13 +57,23 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
       _audioPlayer.play();
     } else {
       _audioPlayer.pause();
+      _audioPlayer.seek(Duration.zero); // optional: reset position on stop
     }
+
   }
 
   @override
   void dispose() {
     _audioPlayer.dispose();
     super.dispose();
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes =
+    duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds =
+    duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return "$minutes:$seconds";
   }
 
   @override
@@ -85,21 +99,26 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
               size: 30,
             ),
             onPressed: () {
+              // Call parent's callback to update the playing state.
               widget.onPlay();
             },
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
           ),
           Expanded(
-            child: StreamBuilder<Duration?>(
+            child: StreamBuilder<Duration>(
               stream: _audioPlayer.positionStream,
               builder: (context, snapshot) {
                 final currentPosition = snapshot.data ?? Duration.zero;
-                final totalDuration = _audioPlayer.duration ?? Duration.zero;
-                return SliderTheme(
+                final totalDuration =
+                    _audioPlayer.duration ?? Duration.zero;
+                // Show slider only when total duration is greater than zero.
+                return totalDuration.inSeconds > 0
+                    ? SliderTheme(
                   data: const SliderThemeData(
                     trackHeight: 5,
-                    thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6),
+                    thumbShape:
+                    RoundSliderThumbShape(enabledThumbRadius: 6),
                   ),
                   child: Slider(
                     value: currentPosition.inSeconds.toDouble(),
@@ -108,10 +127,12 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
                     activeColor: Colors.black,
                     inactiveColor: Colors.black12,
                     onChanged: (value) async {
-                      await _audioPlayer.seek(Duration(seconds: value.toInt()));
+                      await _audioPlayer
+                          .seek(Duration(seconds: value.toInt()));
                     },
                   ),
-                );
+                )
+                    : const SizedBox();
               },
             ),
           ),
@@ -131,11 +152,12 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
           ),
-          StreamBuilder<Duration?>(
+          StreamBuilder<Duration>(
             stream: _audioPlayer.positionStream,
             builder: (context, snapshot) {
               final currentPosition = snapshot.data ?? Duration.zero;
-              final totalDuration = _audioPlayer.duration ?? Duration.zero;
+              final totalDuration =
+                  _audioPlayer.duration ?? Duration.zero;
               final remainingTime = totalDuration - currentPosition;
               return Padding(
                 padding: const EdgeInsets.only(left: 8),
@@ -153,13 +175,5 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
         ],
       ),
     );
-  }
-
-  String _formatDuration(Duration duration) {
-    final minutes =
-    duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds =
-    duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return "$minutes:$seconds";
   }
 }

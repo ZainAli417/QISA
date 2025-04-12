@@ -177,23 +177,7 @@ class _ParticipantGridTileState extends State<ParticipantGridTile> {
             ),
           ),
           // Show mic-off icon if no audio stream available.
-          if (audioStream == null)
-            Positioned(
-              top: 8,
-              right: 8,
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: black700,
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                child: const Icon(
-                  Icons.mic_off,
-                  size: 25,
-                  color: Colors.white,
-                ),
-              ),
-            ),
+
           // Participant name label at bottom left.
           Positioned(
             bottom: 4,

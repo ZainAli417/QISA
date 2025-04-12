@@ -28,12 +28,14 @@ import 'package:videosdk_flutter_example/widgets/conference-call/conference_part
 import 'package:videosdk_flutter_example/widgets/conference-call/conference_screenshare_view.dart';
 import 'package:firebase_database/firebase_database.dart';
 
+import '../../providers/meeting_provider.dart';
 import '../../providers/principal_provider.dart';
 import '../../providers/role_provider.dart';
 import '../../providers/teacher_provider.dart';
 import '../../providers/topic_provider.dart';
 import '../../utils/api.dart';
 import '../Quiz and Audio/Audio_Player_UI.dart';
+import '../Quiz and Audio/Quiz_Widget.dart';
 
 class ConferenceMeetingScreen extends StatefulWidget {
   final String meetingId, token, displayName;
@@ -64,6 +66,7 @@ class ConferenceMeetingScreen extends StatefulWidget {
 class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
   bool isRecordingOn = false;
   bool showChatSnackbar = true;
+
   String recordingState = "RECORDING_STOPPED";
   late Room meeting;
   bool _joined = false;
@@ -74,11 +77,14 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
   bool fullScreen = false;
   bool isMicEnabled = true; // assume mic starts enabled
   bool _isLoading = true;
-  List<String> audioFiles = [];
   AudioPlayer? _currentAudioPlayer;
   String? _currentPlayingAudioUrl;
   int audioPlayedCount = 0; // Counter to track audio plays for stats
   List<Map<String, dynamic>> _broadcasts = []; // To store fetched broadcasts
+  List<Map<String, dynamic>> audioFiles = []; // To store fetched broadcasts
+
+  String? selectedTeacher;
+  bool _initialized = false;
 
   StreamSubscription? _broadcastSubscription;
 
@@ -89,31 +95,41 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
   bool isStudent = false;
   bool isPrincipal = false;
   bool isLocalMicEnabled = false;
+
   @override
+
+
   void didChangeDependencies() {
     super.didChangeDependencies();
-    isTeacher = context
-        .read<RoleProvider>()
-        .isTeacher;
-    isStudent = context
-        .read<RoleProvider>()
-        .isStudent;
-    isPrincipal = context
-        .read<RoleProvider>()
-        .isPrincipal;
-  }
 
+    isTeacher = context.read<RoleProvider>().isTeacher;
+    isStudent = context.read<RoleProvider>().isStudent;
+    isPrincipal = context.read<RoleProvider>().isPrincipal;
+
+    if (!_initialized) {
+      if (isTeacher) {
+        _initializeTimer(); // Only teacher starts timer
+      } else {
+        _listenToRemainingTime(); // Others just listen
+      }
+
+
+
+      _initialized = true; // <- Add a boolean to prevent this from running multiple times
+    }
+  }
   @override
   void initState() {
     super.initState();
+
     isLocalMicEnabled = audioStream != null;
-    // Set device orientations first
+    getAssignedTeacherFromDB(widget.meetingId);
+
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
 
-    // Initialize meeting first
     meeting = VideoSDK.createRoom(
       roomId: widget.meetingId,
       token: widget.token,
@@ -133,76 +149,35 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
 
     registerMeetingEvents(meeting);
 
-    // Join the meeting, then store participant stats when the local participant is ready.
     meeting.join().then((_) {
-      // Now that meeting is joined, localParticipant should be available.
-         Future.delayed(const Duration(seconds: 1));
-        storeParticipantStats();
-
+      // Capture join time if teacher.
+      if (context.read<RoleProvider>().isTeacher||isStudent) {
+        // Set join time in MeetingState provider.
+        final meetingState = Provider.of<MeetingState>(context, listen: false);
+        meetingState.setJoinTime(DateTime.now());
+      }
+      Future.delayed(const Duration(seconds: 1));
+      storeParticipantStats();
     });
 
-    // Initialize other listeners/references
-    _dbRef = FirebaseDatabase.instance.ref("remainingTime/${widget.meetingId}");
 
-    if (isTeacher) {
-      _initializeTimer();
-    } else {
-      _listenToRemainingTime();
-    }
-    if (isPrincipal) {
-      startTimer(widget.token, widget.meetingId);
-    }
+    _dbRef = FirebaseDatabase.instance.ref("remainingTime/${widget.meetingId}");
 
     _setupAudioFilesListener();
     _setupBroadcastListener();
   }
 
-  Duration? elapsedTime;
-  Timer? sessionTimer;
+  void _initializeTimer() async {
+    final snapshot = await _dbRef.get();
 
-  /// Starts a session timer based on the session start time.
-  Future<void> startTimer(String token, String meetingId) async {
-    dynamic session = await fetchSession(token, meetingId);
-    DateTime sessionStartTime = DateTime.parse(session['start']);
-    final difference = DateTime.now().difference(sessionStartTime);
+    if (snapshot.exists) return; // Timer already started
 
-    setState(() {
-      elapsedTime = difference;
-      sessionTimer = Timer.periodic(
-        const Duration(seconds: 1),
-            (timer) {
-          setState(() {
-            elapsedTime = Duration(
-                seconds: elapsedTime != null ? elapsedTime!.inSeconds + 1 : 0);
-          });
-        },
-      );
-    });
-  }
-
-  Future<void> saveElapsedTime(String meetingId, Duration elapsedTime) async {
-    try {
-      await FirebaseFirestore.instance
-          .collection('meeting_record')
-          .doc(meetingId)
-          .update({
-        'elapsed_time': elapsedTime.inMinutes,
-        // or convert to minutes if needed
-      });
-    } catch (e) {
-      print("Error saving elapsed time: $e");
-    }
-  }
-
-
-  void _initializeTimer() {
     _dbRef.set(_remainingMinutes); // Set initial time in the database
     _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
       setState(() {
         if (_remainingMinutes > 0) {
           _remainingMinutes--;
-          _dbRef.set(
-              _remainingMinutes); // Update the remaining time in the database
+          _dbRef.set(_remainingMinutes); // Update in real time
         }
 
         if (_remainingMinutes == 10) {
@@ -211,32 +186,29 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
 
         if (_remainingMinutes == 0) {
           _timer?.cancel();
-
           meeting.end();
+
+          Future.delayed(const Duration(milliseconds: 500), () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => SplashScreen()),
+            );
+          });
         }
-        Future.delayed(const Duration(milliseconds: 500), () {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-                builder: (context) =>
-                    SplashScreen()), // Navigate to TeacherScreen
-          );
-        });
       });
     });
   }
-
+  StreamSubscription<DatabaseEvent>? _remainingTimeSubscription;
   void _listenToRemainingTime() {
-    _dbRef.onValue.listen((event) {
+    _remainingTimeSubscription = _dbRef.onValue.listen((event) {
       final time = event.snapshot.value as int?;
-      if (time != null) {
+      if (time != null && !isTeacher && mounted) {
         setState(() {
           _remainingMinutes = time;
         });
       }
     });
   }
-
   void _showWarningPopup() {
     showDialog(
       context: context,
@@ -258,6 +230,13 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
     );
   }
 
+
+
+
+
+
+
+
   void _setupBroadcastListener() {
     final collectionRef =
     FirebaseFirestore.instance.collection('broadcast_voice');
@@ -277,149 +256,54 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       });
     });
   }
-
   StreamSubscription? _audioFilesSubscription;
-
   void _setupAudioFilesListener() {
     final collectionRef =
     FirebaseFirestore.instance.collection('Study_material');
 
-    _audioFilesSubscription = collectionRef.snapshots().listen((querySnapshot) {
-      try {
-        setState(() {
-          audioFiles = querySnapshot.docs
-              .map((doc) => (doc['AudioFiles'] as List).cast<String>())
-              .expand((x) => x)
-              .toList();
-        });
-      } catch (e) {
-        print("Error processing audio files: $e");
-      }
+    _audioFilesSubscription = collectionRef
+        .orderBy('CreatedAt', descending: true)
+        .snapshots()
+        .listen((querySnapshot) {
+      setState(() {
+        audioFiles = querySnapshot.docs.map((doc) {
+          return {
+            'audioFiles': List<String>.from(doc['AudioFiles']),
+            'createdAt': doc['CreatedAt'], // Optional for display or sorting
+          };
+        }).toList();
+      });
     });
   }
-  /*
-  void _playAudio_simple(String audioUrl) {
-    if (_currentPlayingAudioUrl == audioUrl) {
-      // If the same audio is clicked, pause it
-      setState(() {
-        _currentPlayingAudioUrl = null; // Reset to not playing
-      });
-    } else {
-      setState(() {
-        _currentPlayingAudioUrl = audioUrl; // Track currently playing audio URL
-      });
-    }
-  }
-  */
-/*
-  Future<void> _playAudio_stats(String audioUrl) async {
-    if (_currentPlayingAudioUrl == audioUrl) {
-      // If the same audio is clicked, pause it
-      setState(() {
-        _currentPlayingAudioUrl = null; // Reset to not playing
-      });
-    } else {
-      setState(() {
-        _currentPlayingAudioUrl = audioUrl; // Track currently playing audio URL
-        audioPlayedCount++; // Increment play count
-      });
-
-      await updateAudioCountInFirestore(audioPlayedCount);
-    }
-  }
-
-
-  Future<void> updateAudioCountInFirestore(int playCount) async {
-    final participantId = meeting.localParticipant
-        .id; // Retrieve participant ID
-    final DocumentReference participantDoc =
-    FirebaseFirestore.instance.collection('meeting_record')
-        .doc(meeting.id)
-        .collection('Stats')
-        .doc(participantId);
-
-    // Update the audio played count
-    await participantDoc.update({'audioPlayedCount': playCount});
-    print(
-        'Updated audio played count for participant $participantId: $playCount');
-  }
-  void _stopCurrentAudio() {
-    if (_currentAudioPlayer != null) {
-      _currentAudioPlayer?.pause(); // Pause the current audio
-      _currentAudioPlayer?.dispose();
-      _currentAudioPlayer = null;
-      _currentPlayingAudioUrl = null; // Reset the currently playing audio URL
-    }
-  }
-
- */
   void _playAudio_broad(String audioUrl) {
     setState(() {
+      // Toggle play state.
       if (_currentPlayingAudioUrl == audioUrl) {
-        _currentPlayingAudioUrl = null; // Toggle off if already playing
+        _currentPlayingAudioUrl = null;
       } else {
-        _currentPlayingAudioUrl = audioUrl; // Set as currently playing
+        _currentPlayingAudioUrl = audioUrl;
       }
     });
   }
-
-  /// Plays audio, updates the currently playing URL, and triggers a UI rebuild
-  /// specifically within the modal bottom sheet.
-  void _playAudio_simple(String audioUrl, StateSetter modalSetState) {
-    // Use the StateSetter passed from the StatefulBuilder
-    modalSetState(() {
+  void _playAudio_stats(String audioUrl) {
+    setState(() {
       if (_currentPlayingAudioUrl == audioUrl) {
-        // If the clicked URL is already playing, stop it (set URL to null)
         _currentPlayingAudioUrl = null;
-        // --- Add your actual audio stop logic here ---
-        print("Stopping audio: $audioUrl");
       } else {
-        // If a different URL is clicked, or none is playing, start the new one
         _currentPlayingAudioUrl = audioUrl;
-        // --- Add your actual audio play logic here (start playing audioUrl) ---
-        print("Playing audio: $audioUrl");
-      }
-    });
-    // If you also need the parent widget housing the modal to rebuild for other reasons,
-    // you might call its own setState here as well, but it's not needed for the
-    // modal's internal UI update (like the play/pause button).
-    // setState(() {});
-  }
-
-  /// Plays audio, updates the currently playing URL, increments play count,
-  /// updates Firestore, and triggers a UI rebuild within the modal bottom sheet.
-  void _playAudio_stats(String audioUrl, StateSetter modalSetState) {
-    // Use the StateSetter passed from the StatefulBuilder
-    // Note: If updateAudioCountInFirestore is async, the lambda becomes async
-    modalSetState(() async { // Make the lambda async if needed
-      if (_currentPlayingAudioUrl == audioUrl) {
-        // If the clicked URL is already playing, stop it
-        _currentPlayingAudioUrl = null;
-        // --- Add your actual audio stop logic here ---
-        print("Stopping audio: $audioUrl");
-      } else {
-        // If a different URL is clicked, or none is playing, start the new one
-        final previousUrl = _currentPlayingAudioUrl; // Store previous if needed for stopping
-        _currentPlayingAudioUrl = audioUrl;
-        // --- Add your actual audio play logic here (stop previousUrl, start audioUrl) ---
-        print("Playing audio: $audioUrl");
-
-        // Increment play count and update Firestore only when starting a new audio
         audioPlayedCount++;
-        print("Audio played count: $audioPlayedCount");
-        // Call your Firestore update function (ensure it handles errors)
-        try {
-          await updateAudioCountInFirestore(audioPlayedCount); // Assuming this exists
-          print("Firestore count updated successfully.");
-        } catch (e) {
-          print("Error updating Firestore count: $e");
-          // Handle error appropriately (e.g., show a snackbar)
-        }
       }
     });
-    // Again, only call parent's setState if the parent widget itself needs to react
-    // setState(() {});
+    print("Audio played count: $audioPlayedCount");
+    try {
+      updateAudioCountInFirestore(audioPlayedCount); // Your function to update Firestore.
+      print("Firestore count updated successfully.");
+    } catch (e) {
+      print("Error updating Firestore count: $e");
+    }
   }
+
+
 
 
 
@@ -434,9 +318,6 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
     await participantDoc.update({'audioPlayedCount': playCount});
     print('Updated audio played count for participant $participantId: $playCount');
   }
-
-
-
   Future<void> storeParticipantStats() async {
     final roleProvider = Provider.of<RoleProvider>(context, listen: false);
     String role = roleProvider.isTeacher
@@ -453,12 +334,12 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
 
     final data = {
       'displayName': widget.displayName,
-      'joinTime': FieldValue.serverTimestamp(),
+     // 'joinTime': FieldValue.serverTimestamp(),
       // Store current time as a Timestamp
       'audioPlayedCount': 0,
       'role': role,
       // Initialize audio played count to zero
-      'Q_marks': 20,
+      'Q_marks': 0,
       // Initialize quiz marks
       'isLocal': true,
       // Set to true since this is the local participant
@@ -479,9 +360,34 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       print('Error saving participant stats: $e');
     }
   }
+  Future<String> getAssignedTeacherFromDB(String meetingId) async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('meeting_record')
+          .doc(meetingId)
+          .get();
+
+      if (doc.exists) {
+        final data = doc.data();
+        if (data != null && data.containsKey('assigned_to')) {
+          final assignedTeacher = data['assigned_to'] as String;
+          return assignedTeacher;
+        }
+      }
+    } catch (e) {
+      debugPrint("Error retrieving assigned teacher: $e");
+    }
+    return "";
+  }
+
+
+
+
   @override
   Widget build(BuildContext context) {
-    final principalProvider = Provider.of<PrincipalProvider>(context);
+    final String participantId = meeting.localParticipant.id;
+
+
     final statusbarHeight = MediaQuery.of(context).padding.top;
     bool isWebMobile = kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.iOS ||
@@ -665,7 +571,43 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                           icon: Icons.video_call,
                           label: 'Room List',
                           onPressed: () async {
-                            meeting.leave();
+                            final roleProvider = Provider.of<RoleProvider>(context, listen: false);
+
+                            // For principals, ensure a valid teacher is selected by checking the DB.
+                            if (roleProvider.isPrincipal) {
+                              // Fetch the assigned teacher from the database for this meeting.
+                              String teacherFromDB = await getAssignedTeacherFromDB(meeting.id);
+
+                              // If we found a teacher from the DB, update our local variable.
+                              if (teacherFromDB.isNotEmpty) {
+                                selectedTeacher = teacherFromDB;
+                              }
+
+                              // Check if there's a valid teacher assignment.
+                              if (selectedTeacher == null || selectedTeacher!.isEmpty) {
+                                showSnackBarMessage(
+                                  message: "Please assign meeting before proceeding.",
+                                  context: context,
+                                );
+                                return; // Prevent navigation if assignment is missing.
+                              }
+                            }
+                            final participantId = meeting.localParticipant.id;
+
+                            try {
+                              await FirebaseFirestore.instance
+                                  .collection('meeting_record')
+                                  .doc(meeting.id)
+                                  .collection('Stats')
+                                  .doc(participantId) // Use the participant ID of the teacher/principal
+                                  .update({'inmeeting': false});
+                            } catch (e) {
+                              print("Error updating inmeeting status: $e");
+                            }
+                            // Leave the meeting.
+                             meeting.leave();
+
+                            // Navigate after a short delay.
                             Future.delayed(const Duration(milliseconds: 500), () {
                               Navigator.pushReplacement(
                                 context,
@@ -674,6 +616,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                             });
                           },
                         ),
+
                       ]);
                     }
 
@@ -704,10 +647,25 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                     isCamEnabled: videoStream != null,
                     isScreenShareEnabled: shareStream != null,
                     recordingState: recordingState,
+
+
                     onCallEndButtonPressed: () async {
+
+                      final meetingState = Provider.of<MeetingState>(
+                        context, listen: false);
+                    DateTime end = DateTime.now();
+                    meetingState.setEndTime(end);
+
+                    // Compute the elapsed time if join time is available.
+                    if (meetingState.joinTime != null) {
+                      Duration elapsed = end.difference(meetingState
+                          .joinTime!);
+
+                      await saveElapsedTime(meeting.id, elapsed);
+                    }
+
                       meeting.end();
-                      await saveElapsedTime(
-                          meeting.id, elapsedTime ?? Duration.zero);
+
                       Future.delayed(const Duration(milliseconds: 500), () {
                         Navigator.pushReplacement(
                           context,
@@ -716,8 +674,19 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                         );
                       });
                     },
-                    onCallLeaveButtonPressed: () {
+                    onCallLeaveButtonPressed: () async {
+                      final meetingState = Provider.of<MeetingState>(context, listen: false);
+                      DateTime end = DateTime.now();
+                      meetingState.setEndTime(end);
+
+                      if (meetingState.joinTime != null) {
+                        Duration elapsed = end.difference(meetingState.joinTime!);
+                        await saveElapsedTime_students(meeting.id, participantId, elapsed); // Save student time
+                      }
+                      Future.delayed(const Duration(milliseconds: 250), () {
+
                       meeting.leave();
+
                       Future.delayed(const Duration(milliseconds: 500), () {
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                           if (mounted) {
@@ -729,6 +698,12 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                         });
                       });
                     },
+
+                    );
+                    },
+
+
+
                     // Updated mic control callback
                     onMicButtonPressed: () {
                       setState(() {
@@ -864,6 +839,38 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
           : const WaitingToJoin(),
     );
   }
+  Future<void> saveElapsedTime(String meetingId, Duration elapsedTime) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('meeting_record')
+          .doc(meetingId)
+          .update({
+        'elapsed_time': elapsedTime.inMinutes,
+        'inmeeting': false,
+
+      });
+    } catch (e) {
+      print("Error saving elapsed time: $e");
+    }
+  }
+  Future<void> saveElapsedTime_students(String meetingId, String participantId, Duration elapsedTime) async {
+    try {
+      final DocumentReference participantDoc = FirebaseFirestore.instance
+          .collection('meeting_record')
+          .doc(meetingId)
+          .collection('Stats')
+          .doc(participantId);
+
+      await participantDoc.update({
+        'elapsed_time': elapsedTime.inMinutes,
+        'inmeeting': false,
+
+      });
+    } catch (e) {
+      print("Error saving elapsed time for $participantId: $e");
+    }
+  }
+
 
 // Helper method to build action buttons
   Widget _buildActionButton({
@@ -891,45 +898,15 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
     );
   }
 
-
   void Lecture_button_Conditional_Trigger(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
-      builder: (context) => StatefulBuilder( // Gives us bottomSheetSetState
-        builder: (BuildContext context, StateSetter bottomSheetSetState) {
-          return Container(
-            // Make height dynamic or sufficient
-            height: MediaQuery.of(context).size.height * 0.6, // Adjusted height maybe?
-            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Consumer<RoleProvider>(
-                  builder: (context, roleProvider, child) {
-                    if (roleProvider.isTeacher || roleProvider.isPrincipal) {
-                      // Pass the modal's setState and the current URL down
-                      return Teacher_Lecture_card(
-                        context,
-                        _currentPlayingAudioUrl,
-                            (audioUrl) => _playAudio_simple(audioUrl, bottomSheetSetState), // Pass the playback function correctly
-                      );
-                    } else if (roleProvider.isStudent) {
-                      // Pass the modal's setState and the current URL down
-                      return Student_Lecture_card(
-                        context,
-                        _currentPlayingAudioUrl, // Pass current URL for isPlaying check
-                            (audioUrl) => _playAudio_stats(audioUrl, bottomSheetSetState), // Pass the playback function correctly
-                      );
-                    }
-                    return const SizedBox.shrink(); // Fallback
-                  },
-                ),
-              ],
-            ),
-          );
-        },
+      builder: (context) => AudioBottomSheet(
+        currentPlayingAudioUrl: _currentPlayingAudioUrl,
+        onPlayAudio_broad: _playAudio_broad,
+        onPlayAudio_stats: _playAudio_stats,
       ),
     );
   }
@@ -937,193 +914,24 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
 
 
 
-  Widget Teacher_Lecture_card(
-      BuildContext context,
-      String? currentPlayingAudioUrl,
-      Function(String) onPlayAudio, // Accepts the function to call on play
-      ) {
-    // Keep height calculation or consider Flexible/Expanded if needed
-        return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.4,
-      child: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('Study_material').snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(
-              child: Text(
-                'No lectures found.',
-                style: GoogleFonts.quicksand(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.grey[600]),
-              ),
-            );
-          }
-          final lectureDocs = snapshot.data!.docs;
-          return ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.only(bottom: 8.0),
-            itemCount: lectureDocs.length,
-            itemBuilder: (context, index) {
-              final lecture = lectureDocs[index];
-              final lectureName = lecture['TopicName'] ?? 'No Name';
-              final lectureDescription = lecture['TopicDescription'] ?? 'No Description';
-              final audioFiles = lecture['AudioFiles'] ?? [];
-              final status = lecture['Status'] ?? 'Approved';
-              return Card(
-                elevation: 0,
-                color: Colors.white,
-                margin: const EdgeInsets.only(bottom: 6.0),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Lecture Name', style: GoogleFonts.quicksand(fontSize: 12, color: Colors.grey)),
-                              Text(lectureName, style: GoogleFonts.quicksand(fontSize: 14, fontWeight: FontWeight.w700)),
-                            ],
-                          ),
-                          Row(
-                            children: [
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue[700],
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                ),
-                                onPressed: () {},
-                                child: Text(status, style: GoogleFonts.quicksand(fontSize: 12, color: Colors.white)),
-                              ),
-                              IconButton(
-                                onPressed: () async {
-                                  await FirebaseFirestore.instance.collection('Study_material').doc(lecture.id).delete();
-                                },
-                                icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text('Lecture Description', style: GoogleFonts.quicksand(fontSize: 12, color: Colors.grey)),
-                      Text(lectureDescription, style: GoogleFonts.quicksand(fontSize: 14, fontWeight: FontWeight.w500)),
-                      if (audioFiles.isNotEmpty)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 6),
-                            Text('Lecture Audio Files', style: GoogleFonts.quicksand(fontSize: 12, color: Colors.grey)),
-                            // Use the passed down state and function
-                            ...audioFiles.map<Widget>((audioUrl) => Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
-
-                              child: AudioPlayerWidget(
-                                audioUrl: audioUrl,
-                                // Call the passed function, which handles state update
-                                onPlay: () => onPlayAudio(audioUrl),
-                                isPlaying: currentPlayingAudioUrl == audioUrl,
-                              ),
 
 
-                            )),
-                          ],
-                        ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
 
 
-  Widget Student_Lecture_card(
-      BuildContext context,
-      String? currentPlayingAudioUrl, // Receive current URL
-      Function(String) onPlayAudio, // Receive the playback function
-      ) {
-    // Use watch or select for more fine-grained updates if needed
-    final principalProvider = Provider.of<PrincipalProvider>(context);
 
-    // Ensure the height is appropriate or use Flexible/Expanded
-    return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.5, // Adjust as needed
-      child: principalProvider.teacherCards.isEmpty
-          ? Center(
-        child: Text(
-          'No approved content available.',
-          style: GoogleFonts.quicksand(fontSize: 14, color: Colors.grey[600], fontWeight: FontWeight.w500),
-        ),
-      )
-          : ListView.builder(
-        // Consider shrinkWrap: true,
-        padding: const EdgeInsets.only(bottom: 38.0), // Check if this padding is necessary
-        itemCount: principalProvider.teacherCards.length,
-        itemBuilder: (context, index) {
-          final card = principalProvider.teacherCards[index];
-          // Ensure audioFiles is treated as a list of strings
-          final audioFiles = List<String>.from(card['audioFiles'] as List? ?? []);
 
-          return Card(
-            // ... (Card styling remains the same) ...
-            elevation: 0,
-            color: Colors.white,
-            margin: const EdgeInsets.only(bottom: 6.0),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('List Of Lectures', style: GoogleFonts.quicksand(fontSize: 16, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 6), // Add some spacing
-                  if (audioFiles.isNotEmpty)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: audioFiles.map<Widget>((audioUrl) {
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 4.0),
-                          child: AudioPlayerWidget(
-                            audioUrl: audioUrl,
-                            // Use the passed function
-                            onPlay: () => onPlayAudio(audioUrl),
-                            // Use the passed state variable
-                            isPlaying: currentPlayingAudioUrl == audioUrl,
-                          ),
-                        );
-                      }).toList(), // Ensure it's a List<Widget>
-                    )
-                  else
-                    Padding( // Indicate if no audio files for this card
-                      padding: const EdgeInsets.only(top: 4.0),
-                      child: Text(
-                        'No audio files for this lecture.',
-                        style: GoogleFonts.quicksand(fontSize: 12, color: Colors.grey),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
+
+
+
+
+
+
+
+
+
+
+
+
 
   // Updated Create More Button UI
   Widget buildCreateMoreButton() {
@@ -1168,9 +976,6 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       },
     );
   }
-
-
-
   // Bottom Sheet for Quiz
   void _showQuizBottomSheet(BuildContext context) {
     showModalBottomSheet(
@@ -1191,7 +996,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            Expanded(child: QuizWidget()),
+            Expanded(child: QuizWidget(meeting: meeting,)),
           ],
         ),
       ),
@@ -1238,6 +1043,8 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
       ),
     );
   }
+
+
 
 
 
@@ -1365,6 +1172,9 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
   }
   @override
   void dispose() {
+    _timer?.cancel(); // cancel teacher timer if any
+    _remainingTimeSubscription?.cancel(); // stop listening to Firebase
+    super.dispose();
     _broadcastSubscription
         ?.cancel(); // Stop the listener when the widget is disposed
     _audioFilesSubscription
@@ -1385,357 +1195,233 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
 
 
 
+class AudioBottomSheet extends StatefulWidget {
+  final String? currentPlayingAudioUrl;
+  final Function(String) onPlayAudio_broad;
+  final Function(String) onPlayAudio_stats;
 
+  const AudioBottomSheet({
+    required this.currentPlayingAudioUrl,
+    required this.onPlayAudio_broad,
+    required this.onPlayAudio_stats,
+    Key? key,
+  }) : super(key: key);
 
-class QuizWidget extends StatefulWidget {
   @override
-  _QuizWidgetState createState() => _QuizWidgetState();
+  State<AudioBottomSheet> createState() => _AudioBottomSheetState();
 }
 
-class _QuizWidgetState extends State<QuizWidget> {
-  final PageController _pageController = PageController();
-  int _currentQuestionIndex = 0;
-  Timer? _timer;
-  int _remainingTime = 15;
-  bool _quizStarted = false;
-  String? _selectedChoice;
-
-  final List<Map<String, dynamic>> _questions = [
-    {
-      'question': 'What is photography?',
-      'choices': [
-        'Drawing with light',
-        'Painting with water',
-        'Writing stories',
-        'Printing documents'
-      ],
-      'answer': 'Drawing with light',
-    },
-    {
-      'question': 'Which is NOT a type of photography?',
-      'choices': ['Portrait', 'Landscape', 'Cooking', 'Wildlife'],
-      'answer': 'Cooking',
-    },
-    {
-      'question': 'WHat is used to capture the photos?',
-      'choices': ['Phone', 'Camera', 'Microphone', 'Telescope'],
-      'answer': 'Camera',
-    },
-    {
-      'question': 'What controls the brightness of a photo?',
-      'choices': ['ISO', 'Zoom', 'Shutter', 'Flash'],
-      'answer': 'ISO',
-    },
-    {
-      'question': 'What does a tripod do?',
-      'choices': [
-        'Hold the camera steady',
-        'Change camera settings',
-        'Clean the lens',
-        'Store photos'
-      ],
-      'answer': 'Hold the camera steady',
-    },
-    {
-      'question': 'Which light is best for outdoor photography?',
-      'choices': ['Morning and evening', 'Noon', 'Night', 'Artificial Light'],
-      'answer': 'Morning and evening',
-    },
-    {
-      'question': 'What is a zoom lens used for?',
-      'choices': [
-        'Taking close-up shots from far away',
-        'Adding filters',
-        'Fixing blurry images',
-        'Editing photos'
-      ],
-      'answer': 'Taking close-up shots from far away',
-    },
-    {
-      'question': 'What is a common use of portrait photography?',
-      'choices': [
-        'Shooting buildings',
-        'Capturing nature',
-        'Photographing animals',
-        'Taking selfies'
-      ],
-      'answer': 'Taking selfies',
-    },
-    {
-      'question': 'What is essential for low-light photography?',
-      'choices': ['Flash', 'Tripod', 'Zoom Lens', 'Filter'],
-      'answer': 'Flash',
-    },
-    {
-      'question': 'What does editing software do?',
-      'choices': [
-        'Improve photo quality',
-        'Capture photos',
-        'Print photos',
-        'Store files'
-      ],
-      'answer': 'Improve photo quality',
-    },
-    {
-      'question': 'What should you clean regularly in your camera?',
-      'choices': ['Lens', 'Battery', 'Flash', 'Shutter'],
-      'answer': 'Lens',
-    },
-    {
-      'question': 'What is "composition" in photography?',
-      'choices': [
-        'How a photo is arranged',
-        'The color of the photo',
-        'The size of the photo',
-        'The brightness of the photo'
-      ],
-      'answer': 'How a photo is arranged',
-    },
-    {
-      'question': 'Which tool adjusts color tones?',
-      'choices': ['Filters', 'Shutter', 'Lens Cap', 'Battery'],
-      'answer': 'Filters',
-    },
-    {
-      'question': 'What is the first step to learn photography?',
-      'choices': [
-        'Understanding the camera',
-        'Buying a tripod',
-        'Printing photos',
-        'Learning to edit'
-      ],
-      'answer': 'Understanding the camera',
-    },
-    {
-      'question': 'What does a "wide-angle lens" capture?',
-      'choices': [
-        'Large Areas',
-        'Tiny Objects',
-        'Close Up Shoots',
-        'Distant Object'
-      ],
-      'answer': 'Large Areas',
-    },
-  ];
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  void _startQuiz() {
-    setState(() {
-      _quizStarted = true;
-      _startTimer();
-    });
-  }
-
-  void _startTimer() {
-    _remainingTime = 15;
-    _timer?.cancel();
-    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
-      setState(() {
-        if (_remainingTime > 0) {
-          _remainingTime--;
-        } else {
-          _goToNextQuestion();
-        }
-      });
-    });
-  }
-
-  void _goToNextQuestion() {
-    _timer?.cancel();
-    if (_currentQuestionIndex < _questions.length - 1) {
-      setState(() {
-        _currentQuestionIndex++;
-        _selectedChoice = null;
-      });
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOut,
-      );
-      _startTimer();
-    } else {
-      // Quiz ends
-      _timer?.cancel();
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(
-            'Quiz Completed',
-            style: GoogleFonts.quicksand(
-                fontSize: 18, fontWeight: FontWeight.w700, color: Colors.black),
-          ),
-          content: const Text('You have finished the quiz.'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                setState(() {
-                  _currentQuestionIndex = 0;
-                  _selectedChoice = null;
-                  _pageController.jumpToPage(0);
-                  _quizStarted = false;
-                });
-              },
-              child: Text(
-                'Restart',
-                style: GoogleFonts.quicksand(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-  }
-
-  void _onOptionSelected(String choice) {
-    setState(() {
-      _selectedChoice = choice;
-    });
-    Future.delayed(const Duration(seconds: 2), () {
-      _goToNextQuestion();
-    });
-  }
-
+class _AudioBottomSheetState extends State<AudioBottomSheet> {
   @override
   Widget build(BuildContext context) {
-    return _quizStarted
-        ? SizedBox(
-            height: 400,
-            child: Column(
-              children: [
-                Text(
-                  'Time Remaining: $_remainingTime seconds',
-                  style: GoogleFonts.quicksand(
-                    fontSize: 16,
-                    color: Colors.redAccent,
-                    fontWeight: FontWeight.w700,
-                  ),
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.6,
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Consumer<RoleProvider>(
+            builder: (context, roleProvider, child) {
+              if (roleProvider.isTeacher || roleProvider.isPrincipal) {
+                return Teacher_Lecture_card(
+                  context,
+                  widget.currentPlayingAudioUrl,
+                  widget.onPlayAudio_broad,
+                );
+              } else if (roleProvider.isStudent) {
+                return Student_Lecture_card(
+                  context,
+                  widget.currentPlayingAudioUrl,
+                  widget.onPlayAudio_stats,
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  Widget Teacher_Lecture_card(
+      BuildContext context,
+      String? currentPlayingAudioUrl,
+      Function(String) onPlayAudio, // Accepts the function to call on play.
+      ) {
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.4,
+      child: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('Study_material').snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return Center(
+              child: Text(
+                'No lectures found.',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.grey[600]),
+              ),
+            );
+          }
+          final lectureDocs = snapshot.data!.docs;
+          return ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.only(bottom: 8.0),
+            itemCount: lectureDocs.length,
+            itemBuilder: (context, index) {
+              final lecture = lectureDocs[index];
+              final lectureName = lecture['TopicName'] ?? 'No Name';
+              final lectureDescription = lecture['TopicDescription'] ?? 'No Description';
+              final audioFiles = lecture['AudioFiles'] ?? [];
+              final status = lecture['Status'] ?? 'Approved';
+              return Card(
+                elevation: 0,
+                color: Colors.white,
+                margin: const EdgeInsets.only(bottom: 6.0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 200,
-                  child: PageView.builder(
-                    controller: _pageController,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _questions.length,
-                    itemBuilder: (context, index) {
-                      final question = _questions[index];
-                      return SingleChildScrollView(
-                        child: Column(
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header with lecture title and controls.
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Lecture Name', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                              Text(lectureName, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue[700],
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                ),
+                                onPressed: () {},
+                                child: Text(status, style: TextStyle(fontSize: 12, color: Colors.white)),
+                              ),
+                              IconButton(
+                                onPressed: () async {
+                                  await FirebaseFirestore.instance.collection('Study_material').doc(lecture.id).delete();
+                                },
+                                icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text('Lecture Description', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      Text(lectureDescription, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                      if (audioFiles.isNotEmpty)
+                        Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              question['question'],
-                              style: GoogleFonts.quicksand(
-                                fontSize: 16,
-                                color: Colors.black87,
-                                fontWeight: FontWeight.w700,
+                            const SizedBox(height: 6),
+                            Text('Lecture Audio Files', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                            ...audioFiles.map<Widget>((audioUrl) => Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: AudioPlayerWidget(
+                                audioUrl: audioUrl,
+                                onPlay: () => onPlayAudio(audioUrl),
+                                // Compare the audioUrl with currentPlayingAudioUrl from parent.
+                                isPlaying: currentPlayingAudioUrl == audioUrl,
                               ),
-                            ),
-                            const SizedBox(height: 20),
-                            Wrap(
-                              spacing: 10.0,
-                              runSpacing: 10.0,
-                              children:
-                                  question['choices'].map<Widget>((choice) {
-                                final isSelected = choice == _selectedChoice;
-                                final isCorrect = choice == question['answer'];
-                                Color? backgroundColor;
-                                if (isSelected) {
-                                  backgroundColor =
-                                      isCorrect ? Colors.green : Colors.red;
-                                } else {
-                                  backgroundColor = Colors.white;
-                                }
-                                return GestureDetector(
-                                  onTap: _selectedChoice == null
-                                      ? () => _onOptionSelected(choice)
-                                      : null,
-                                  child: Container(
-                                    width:
-                                        MediaQuery.of(context).size.width / 2 -
-                                            30,
-                                    padding: const EdgeInsets.all(10.0),
-                                    decoration: BoxDecoration(
-                                      color: backgroundColor,
-                                      borderRadius: BorderRadius.circular(8.0),
-                                      border: Border.all(color: Colors.grey),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.1),
-                                          blurRadius: 4,
-                                          offset: const Offset(0, 2),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Text(
-                                      choice,
-                                      textAlign: TextAlign.center,
-                                      style: GoogleFonts.quicksand(
-                                        fontSize: 16,
-                                        color: isSelected
-                                            ? Colors.white
-                                            : Colors.black,
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
+                            )),
                           ],
                         ),
-                      );
-                    },
+                    ],
                   ),
                 ),
-              ],
-            ),
-          )
-        : Column(children: [
-            Divider(),
-            Center(
-              child: Text(
-                'Quiz is Based on Lecture #01',
-                style: GoogleFonts.quicksand(
-                  fontSize: 14,
-                  color: Colors.black87,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            Divider(),
-            Center(
-              child: ElevatedButton(
-                onPressed: _startQuiz,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 24.0, vertical: 12.0),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8.0),
-                  ),
-                ),
-                child: Text(
-                  'Start Quiz',
-                  style: GoogleFonts.quicksand(
-                    fontSize: 18,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-          ]);
+              );
+            },
+          );
+        },
+      ),
+    );
   }
+
+  Widget Student_Lecture_card(
+      BuildContext context,
+      String? currentPlayingAudioUrl, // Current playing audio URL flag from parent.
+      Function(String) onPlayAudio, // Playback function.
+      ) {
+    final principalProvider = Provider.of<PrincipalProvider>(context);
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.5,
+      child: principalProvider.teacherCards.isEmpty
+          ? Center(
+        child: Text(
+          'No approved content available.',
+          style: TextStyle(fontSize: 14, color: Colors.grey[600], fontWeight: FontWeight.w500),
+        ),
+      )
+          : ListView.builder(
+        padding: const EdgeInsets.only(bottom: 38.0),
+        itemCount: principalProvider.teacherCards.length,
+        itemBuilder: (context, index) {
+          final card = principalProvider.teacherCards[index];
+          final audioFiles = List<String>.from(card['audioFiles'] as List? ?? []);
+
+          return Card(
+            elevation: 0,
+            color: Colors.white,
+            margin: const EdgeInsets.only(bottom: 6.0),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('List Of Lectures', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 6),
+                  if (audioFiles.isNotEmpty)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: audioFiles.map<Widget>((audioUrl) {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: AudioPlayerWidget(
+                            audioUrl: audioUrl,
+                            onPlay: () => onPlayAudio(audioUrl),
+                            isPlaying: currentPlayingAudioUrl == audioUrl,
+                          ),
+                        );
+                      }).toList(),
+                    )
+                  else
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4.0),
+                      child: Text(
+                        'No audio files for this lecture.',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+
 }
+
 /*
 
 class Create_lecture extends StatefulWidget {

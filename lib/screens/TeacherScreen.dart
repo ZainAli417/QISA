@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-
+import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -11,7 +11,10 @@ import 'package:flutter_svg/svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:videosdk/videosdk.dart';
 import 'package:videosdk_flutter_example/screens/SplashScreen.dart';
@@ -22,13 +25,20 @@ import '../providers/topic_provider.dart';
 import 'Quiz and Audio/Broadcast_Screen.dart';
 import 'Quiz and Audio/Audio_Player_UI.dart';
 import 'common/join_screen.dart';
-
+// Define a tuple type if needed (or you can use a package like "tuple")
+class Tuple2<A, B> {
+  final A item1;
+  final B item2;
+  Tuple2(this.item1, this.item2);
+}
 class TeacherScreen extends StatefulWidget {
   @override
   _TeacherScreenState createState() => _TeacherScreenState();
 }
 
 class _TeacherScreenState extends State<TeacherScreen> {
+
+  late final AsyncSnapshot<QuerySnapshot> snapshot;
   bool isRejoin = false;
   get token => 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcGlrZXkiOiJhNmQ5OTI3NC1hMTIyLTRiYzMtYmJhOS0wNDYyOTcyNWNiMDQiLCJwZXJtaXNzaW9ucyI6WyJhbGxvd19qb2luIl0sImlhdCI6MTczNjIyMzYzNywiZXhwIjoxODk0MDExNjM3fQ.TdZwUNK6jQ-SZjCvabdIvnnbpk2wWvSCruRSxLKEMsY';
   List<Map<String, dynamic>> statsData = [];
@@ -52,7 +62,7 @@ String meetingId= '';
               Container(
                 height: 170,
                 decoration: const BoxDecoration(
-                  color: Color(0xFF044B89),
+                  color: Color(0xFF4A90D1),
                   borderRadius: BorderRadius.only(
                     bottomLeft: Radius.circular(30),
                     bottomRight: Radius.circular(30),
@@ -79,7 +89,7 @@ String meetingId= '';
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    const SizedBox(width: 50),
+                    const SizedBox(width: 100),
                     _buildLogoutButton(),
                   ],
                 ),
@@ -166,19 +176,35 @@ String meetingId= '';
                           itemCount: meetings.length,
                           itemBuilder: (context, index) {
                             // Use actual meeting data here
-                            var data = meetings[index].data()
-                            as Map<String, dynamic>;
-                            var roomName =
-                                data['room_name'] ?? 'Unknown Room';
-                            var roomId = data['room_id'] ?? 'N/A'; // Use this
-                            var assignedTo =
-                                data['assigned_to'] ?? 'Unassigned';
+                            var data = meetings[index].data() as Map<String, dynamic>;
+                            var roomName = data['room_name'] ?? 'Unknown Room';
+                            var roomId = data['room_id'] ?? 'N/A';
+                            var assignedTo = data['assigned_to'] ?? 'Unassigned';
+
+                            // Combined stream for meeting document and stats collection.
+                            final combinedStream = Rx.combineLatest2<
+                                DocumentSnapshot<Map<String, dynamic>>,
+                                QuerySnapshot<Map<String, dynamic>>,
+                                Tuple2<DocumentSnapshot<Map<String, dynamic>>,
+                                    QuerySnapshot<Map<String, dynamic>>>>(
+                              FirebaseFirestore.instance
+                                  .collection('meeting_record')
+                                  .doc(roomId)
+                                  .snapshots(),
+                              FirebaseFirestore.instance
+                                  .collection('meeting_record')
+                                  .doc(roomId)
+                                  .collection('Stats')
+                                  .where('inmeeting', isEqualTo: true)
+                                  .snapshots(),
+                                  (doc, stats) => Tuple2(doc, stats),
+                            );
 
                             return Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 1, horizontal: 10),
+                              padding:
+                              const EdgeInsets.symmetric(vertical: 1, horizontal: 10),
                               child: SizedBox(
-                                height: 250, // Reduced height after removing direct graphs
+                                height: 250,
                                 width: 500,
                                 child: Card(
                                   color: Colors.white,
@@ -186,12 +212,11 @@ String meetingId= '';
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-
-
                                   child: Column(
                                     children: [
                                       ListTile(
-                                        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                                        contentPadding: const EdgeInsets.symmetric(
+                                            vertical: 10, horizontal: 16),
                                         leading: const Icon(
                                           Icons.meeting_room,
                                           color: Color(0xFF044B89),
@@ -206,17 +231,23 @@ String meetingId= '';
                                         ),
                                         subtitle: Text(
                                           'Assigned To: $assignedTo',
-                                          style: GoogleFonts.quicksand(fontSize: 14, fontWeight: FontWeight.w600),
+                                          style: GoogleFonts.quicksand(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
                                       ),
                                       const Divider(height: 1, color: Colors.grey),
                                       Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 8.0, horizontal: 16.0),
                                         child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                           children: [
                                             ElevatedButton.icon(
-                                              icon: const Icon(Icons.video_call, color: Colors.white),
+                                              icon: const Icon(Icons.video_call,
+                                                  color: Colors.white),
                                               label: Text(
                                                 'Join',
                                                 style: GoogleFonts.quicksand(
@@ -235,17 +266,19 @@ String meetingId= '';
                                                 Navigator.push(
                                                   context,
                                                   MaterialPageRoute(
-                                                    builder: (context) => ConferenceMeetingScreen(
-                                                      meetingId: roomId,
-                                                      token: token,
-                                                      displayName: roomName,
-                                                    ),
+                                                    builder: (context) =>
+                                                        ConferenceMeetingScreen(
+                                                          meetingId: roomId,
+                                                          token: token,
+                                                          displayName: roomName,
+                                                        ),
                                                   ),
                                                 );
                                               },
                                             ),
                                             ElevatedButton.icon(
-                                              icon: const Icon(Icons.bar_chart, color: Colors.white),
+                                              icon: const Icon(Icons.bar_chart,
+                                                  color: Colors.white),
                                               label: Text(
                                                 'View Stats',
                                                 style: GoogleFonts.quicksand(
@@ -261,111 +294,122 @@ String meetingId= '';
                                                 ),
                                               ),
                                               onPressed: () async {
-                                                showDialog(
+                                                showGeneralDialog(
                                                   context: context,
-                                                  builder: (context) => StatsDialog(
-                                                    meetingId: roomId,
-                                                  ),
+                                                  barrierLabel: "Stats",
+                                                  barrierDismissible: true,
+                                                  barrierColor: Colors.transparent, // We'll apply custom blur
+                                                  transitionDuration: const Duration(milliseconds: 300),
+                                                  transitionBuilder: (context, animation, secondaryAnimation, child) {
+                                                    final offset = Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
+                                                        .animate(CurvedAnimation(parent: animation, curve: Curves.easeOut));
+                                                    return SlideTransition(position: offset, child: child);
+                                                  },
+                                                  pageBuilder: (context, animation, secondaryAnimation) {
+                                                    return GestureDetector(
+                                                      onTap: () => Navigator.of(context).pop(), // Close on outside tap
+                                                      child: BackdropFilter(
+                                                        filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+                                                        child: Scaffold(
+                                                          backgroundColor: Colors.transparent,
+                                                          body: Align(
+                                                            alignment: Alignment.bottomCenter,
+                                                            child: StatsBottomSheet(meetingId: roomId),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
                                                 );
                                               },
+
                                             ),
                                             IconButton(
-                                              icon: const Icon(Icons.qr_code_rounded, color: Colors.black87, size: 30),
+                                              icon: const Icon(Icons.qr_code_rounded,
+                                                  color: Colors.black87, size: 30),
                                               onPressed: () {
                                                 showModalBottomSheet(
                                                   backgroundColor: Colors.grey.shade50,
                                                   context: context,
-                                                  builder: (context) => QrShareWidget(meetingId: roomId, hostedBy: assignedTo),
+                                                  builder: (context) =>
+                                                      QrShareWidget(
+                                                        meetingId: roomId,
+                                                        hostedBy: assignedTo,
+                                                      ),
                                                 );
                                               },
                                             ),
                                           ],
                                         ),
                                       ),
+                                      // Combined StreamBuilder for participant count and elapsed time.
                                       Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                                        child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            // Participant Count Capsule
-                                            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                                              stream: FirebaseFirestore.instance
-                                                  .collection('meeting_record')
-                                                  .doc(roomId)
-                                                  .collection('Stats')
-                                                  .where('inmeeting', isEqualTo: true)
-                                                  .snapshots(),
-                                              builder: (context, snapshot) {
-                                                if (snapshot.hasError) {
-                                                  return Text('Error: ${snapshot.error}');
-                                                }
-                                                if (snapshot.connectionState == ConnectionState.waiting) {
-                                                  return const CircularProgressIndicator();
-                                                }
-                                                final participantCount = snapshot.data!.docs.length;
-                                                return Chip(
-                                                  avatar: const Icon(Icons.people, size: 18, color: Colors.black87),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 16.0, vertical: 8.0),
+                                        child: StreamBuilder<
+                                            Tuple2<
+                                                DocumentSnapshot<Map<String, dynamic>>,
+                                                QuerySnapshot<Map<String, dynamic>>>>(
+                                          stream: combinedStream,
+                                          builder: (context, snapshot) {
+                                            if (snapshot.hasError) {
+                                              return Text('Error: ${snapshot.error}');
+                                            }
+                                            if (snapshot.connectionState ==
+                                                ConnectionState.waiting) {
+                                              return const CircularProgressIndicator();
+                                            }
+                                            final meetingDoc = snapshot.data!.item1;
+                                            final statsSnapshot = snapshot.data!.item2;
+                                            final participantCount =
+                                                statsSnapshot.docs.length;
+
+                                            // Retrieve elapsed time from the meeting document.
+                                            final meetingData = meetingDoc.data();
+                                            final elapsedTime = meetingData?['elapsed_time'];
+
+                                            String displayTime;
+                                            if (elapsedTime is String) {
+                                              displayTime = elapsedTime; // e.g. "IN PROGRESS"
+                                            } else if (elapsedTime is num) {
+                                              displayTime = '$elapsedTime min';
+                                            } else {
+                                              displayTime = 'N/A';
+                                            }
+
+                                            return Row(
+                                              mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Chip(
+                                                  avatar: const Icon(Icons.people,
+                                                      size: 18, color: Colors.black87),
                                                   label: Text(
                                                     'Participants: $participantCount',
-                                                    style: GoogleFonts.quicksand(fontWeight: FontWeight.w600),
+                                                    style: GoogleFonts.quicksand(
+                                                        fontWeight: FontWeight.w600),
                                                   ),
                                                   backgroundColor: Colors.grey[200],
-                                                );
-                                              },
-                                            ),
-
-                                            // Meeting Elapsed Time Capsule
-                                            StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                                              stream: FirebaseFirestore.instance
-                                                  .collection('meeting_record')
-                                                  .doc(roomId)
-                                                  .snapshots(),
-                                              builder: (context, snapshot) {
-                                                if (snapshot.hasError) {
-                                                  print('Firestore Error: ${snapshot.error}');
-                                                  return Text('Error: ${snapshot.error}');
-                                                }
-                                                if (snapshot.connectionState == ConnectionState.waiting) {
-                                                  return const CircularProgressIndicator();
-                                                }
-
-                                                final data = snapshot.data?.data();
-                                                print('Retrieved Firestore Data: $data'); // Debugging output
-
-                                                final elapsedTime = data?['elapsed_time'];
-
-                                                String displayTime;
-                                                if (elapsedTime is String) {
-                                                  displayTime = elapsedTime; // "IN PROGRESS"
-                                                } else if (elapsedTime is num) {
-                                                  displayTime = '$elapsedTime min'; // Convert number to "X min"
-                                                } else {
-                                                  displayTime = 'N/A'; // Fallback for null or unexpected values
-                                                }
-
-                                                return Chip(
-                                                  avatar: const Icon(Icons.access_time, size: 18, color: Colors.black87),
+                                                ),
+                                                Chip(
+                                                  avatar: const Icon(Icons.access_time,
+                                                      size: 18, color: Colors.black87),
                                                   label: Text(
                                                     'Elapsed: $displayTime',
-                                                    style: GoogleFonts.quicksand(fontWeight: FontWeight.w600),
+                                                    style: GoogleFonts.quicksand(
+                                                        fontWeight: FontWeight.w600),
                                                   ),
                                                   backgroundColor: Colors.grey[200],
-                                                );
-                                              },
-                                            ),
-
-                                          ],
+                                                ),
+                                              ],
+                                            );
+                                          },
                                         ),
                                       ),
                                     ],
                                   ),
-
-
-
-
-                                    ),
                                 ),
-
+                              ),
                             );
                           },
                         );
@@ -413,7 +457,7 @@ String meetingId= '';
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10.0),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 5),
       ),
       icon: const Icon(Icons.logout_outlined, color: Colors.white),
       label: Text(
@@ -435,43 +479,40 @@ String meetingId= '';
   }
 }
 
-class StatsDialog extends StatefulWidget {
+
+
+class StatsBottomSheet extends StatefulWidget {
   final String meetingId;
-  const StatsDialog({Key? key, required this.meetingId}) : super(key: key);
+  const StatsBottomSheet({Key? key, required this.meetingId}) : super(key: key);
 
   @override
-  _StatsDialogState createState() => _StatsDialogState();
+  _StatsBottomSheetState createState() => _StatsBottomSheetState();
 }
 
-class _StatsDialogState extends State<StatsDialog> {
+class _StatsBottomSheetState extends State<StatsBottomSheet> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
   List<Map<String, dynamic>> statsData = [];
-  Map<String, Map<String, dynamic>> participantStats = {};
   late StreamSubscription<QuerySnapshot> statsSubscription;
-  late Room meeting;
 
   @override
   void initState() {
     super.initState();
-    listenToStats(); // Start listening to the Firestore collection
+    listenToStats();
   }
-
 
   @override
   void dispose() {
-    statsSubscription.cancel(); // Cancel subscription on dispose
+    statsSubscription.cancel();
     super.dispose();
   }
 
-// Function to listen to stats changes in Firestore
   void listenToStats() {
     statsSubscription = FirebaseFirestore.instance
         .collection('meeting_record')
         .doc(widget.meetingId)
         .collection('Stats')
-
-        .where('role', isEqualTo: 'Student') // Filter only students
+        .where('role', isEqualTo: 'Student')
         .snapshots()
         .listen((snapshot) {
       List<Map<String, dynamic>> fetchedData = snapshot.docs.map((doc) {
@@ -480,9 +521,7 @@ class _StatsDialogState extends State<StatsDialog> {
           'displayName': data['displayName'],
           'audioPlayedCount': data['audioPlayedCount'] ?? 0,
           'Q_marks': data['Q_marks'] ?? 0,
-          'joinTime': (data['joinTime'] is Timestamp)
-              ? (data['joinTime'] as Timestamp).toDate()
-              : DateFormat('HH:mm:ss').parse(data['joinTime']),
+          'elapsed_time': data['elapsed_time'],
         };
       }).toList();
 
@@ -491,9 +530,6 @@ class _StatsDialogState extends State<StatsDialog> {
       });
     });
   }
-
-
-
 
   Widget buildAudioAndQuizGraph(List<Map<String, dynamic>> statsData) {
     return SfCartesianChart(
@@ -515,7 +551,7 @@ class _StatsDialogState extends State<StatsDialog> {
           dataSource: statsData,
           xValueMapper: (data, _) => data['displayName'],
           yValueMapper: (data, _) => data['Q_marks'],
-          name: 'Quiz Marks(Out Of 40)',
+          name: 'Quiz Marks (Out Of 40)',
           color: const Color(0xFFF44336),
           width: 0.2,
         ),
@@ -525,149 +561,185 @@ class _StatsDialogState extends State<StatsDialog> {
     );
   }
 
-  Widget buildJoinTimeGraph(List<Map<String, dynamic>> statsData) {
+
+  Widget buildElapsedTimeGraph(List<Map<String, dynamic>> statsData) {
     return SfCartesianChart(
       primaryXAxis: CategoryAxis(),
-      primaryYAxis: NumericAxis(
-        interval: 3600,
-        maximum: 86400,
-        labelFormat: '{value} s',
-        title: AxisTitle(text: 'Join Time'),
-        axisLabelFormatter: (args) {
-          int totalSeconds = args.value.toInt();
-          int hours = totalSeconds ~/ 3600;
-          int minutes = (totalSeconds % 3600) ~/ 60;
-          int seconds = totalSeconds % 60;
-          return ChartAxisLabel(
-            '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}',
-            null,
-          );
-        },
+      primaryYAxis: const NumericAxis(
+        interval: 2,
+        maximum: 30,
+        title: AxisTitle(text: 'Elapsed Time (mins)'),
       ),
       series: <CartesianSeries>[
         ColumnSeries<Map<String, dynamic>, String>(
           dataSource: statsData,
           xValueMapper: (data, _) => data['displayName'],
           yValueMapper: (data, _) {
-            DateTime joinTime = data['joinTime'];
-            return (joinTime.hour * 3600) +
-                (joinTime.minute * 60) +
-                joinTime.second;
+            var elapsed = data['elapsed_time'];
+            if (elapsed is int) return elapsed;
+            if (elapsed is double) return elapsed.toInt();
+            return 0;
           },
-          name: 'Join Time',
-          color: const Color(0xFF2196F3),
-          width: 0.2,
+          name: 'Elapsed Time',
+          color: const Color(0xFF2BDD7E),
+          width: 0.1,
         ),
       ],
-      legend: Legend(isVisible: true),
+      legend: const Legend(isVisible: true),
       tooltipBehavior: TooltipBehavior(enable: true),
     );
   }
+  Future<void> generateAndSharePDF() async {
+    final pdf = pw.Document();
 
+    pdf.addPage(
+      pw.MultiPage(
+        build: (pw.Context context) => [
+          pw.Header(
+            level: 0,
+            child: pw.Text('Meeting Stats - ${widget.meetingId}'),
+          ),
+        pw.TableHelper. fromTextArray(
+            headers: [
+              'Name',
+              'Audio Replays',
+              'Quiz Marks',
+              'Elapsed Time (min)',
+            ],
+            data: statsData.map((data) {
+              final elapsed = data['elapsed_time'];
+              return [
+                data['displayName'],
+                data['audioPlayedCount'].toString(),
+                data['Q_marks'].toString(),
+                (elapsed is int ? elapsed : (elapsed is double ? elapsed.toInt() : 0)).toString(),
+              ];
+            }).toList(),
+          ),
+        ],
+      ),
+    );
 
+    await Printing.sharePdf(bytes: await pdf.save(), filename: 'meeting_stats_${widget.meetingId}.pdf');
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.5,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
       ),
-      child: Container(
-        width: double.infinity,
-        height: 400,
-        child: Column(
-          children: [
-            Expanded(
-              child: statsData.isNotEmpty
-                  ? Stack(
-                children: [
-                  PageView(
-                    controller: _pageController,
-                    onPageChanged: (page) {
-                      setState(() {
-                        _currentPage = page;
-                      });
-                    },
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: buildAudioAndQuizGraph(statsData),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: buildJoinTimeGraph(statsData),
-                      ),
-                    ],
-                  ),
-                  // Left arrow button
-                  Positioned(
-                    left: 10,
-                    top: 0,
-                    bottom: 0,
-                    child: InkWell(
-                      onTap: () {
-                        if (_currentPage > 0) {
-                          _pageController.previousPage(
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.ease);
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.3),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.arrow_back_ios,
-                            color: Colors.white),
-                      ),
-                    ),
-                  ),
-                  // Right arrow button
-                  Positioned(
-                    right: 10,
-                    top: 0,
-                    bottom: 0,
-                    child: InkWell(
-                      onTap: () {
-                        if (_currentPage < 1) {
-                          _pageController.nextPage(
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.ease);
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.3),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.arrow_forward_ios,
-                            color: Colors.white),
-                      ),
-                    ),
-                  ),
-                ],
-              )
-                  : Center(
-                child: Text(
-                  "No data received yet",
-                  style: GoogleFonts.quicksand(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey,
-                  ),
+
+      child: Column(
+
+        children: [
+          Container(
+            height: 4,
+            width: 40,
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+          Row(
+            children: [
+              Container(
+                height: 4,
+                width: 40,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(20),
                 ),
               ),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: const Text('Close'),
-            ),
-          ],
-        ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.download_rounded),
+                onPressed: generateAndSharePDF,
+                tooltip: 'Download as PDF',
+              ),
+            ],
+          ),
+          Expanded(
+            child: statsData.isNotEmpty
+                ? Stack(
+              children: [
+                PageView(
+                  controller: _pageController,
+                  onPageChanged: (page) {
+                    setState(() {
+                      _currentPage = page;
+                    });
+                  },
+                  children: [
+                    buildAudioAndQuizGraph(statsData),
+                    buildElapsedTimeGraph(statsData),
+                  ],
+                ),
+                Positioned(
+                  left: 10,
+                  top: 0,
+                  bottom: 0,
+                  child: InkWell(
+                    onTap: () {
+                      if (_currentPage > 0) {
+                        _pageController.previousPage(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOutSine,
+                        );
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.3),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.arrow_back_ios,
+                          color: Colors.white),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 10,
+                  top: 0,
+                  bottom: 0,
+                  child: InkWell(
+                    onTap: () {
+                      if (_currentPage < 2) {
+                        _pageController.nextPage(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.ease,
+                        );
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.3),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.arrow_forward_ios,
+                          color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
+            )
+                : const Center(child: CircularProgressIndicator()),
+          ),
+        ],
       ),
     );
   }

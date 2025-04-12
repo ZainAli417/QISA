@@ -8,6 +8,7 @@ import 'package:videosdk_flutter_example/screens/SplashScreen.dart';
 import 'package:videosdk_flutter_example/screens/TeacherScreen.dart';
 import 'package:videosdk_flutter_example/utils/spacer.dart';
 import '../../../constants/colors.dart';
+import '../../../providers/meeting_provider.dart';
 import '../../../providers/role_provider.dart';
 
 // Meeting ActionBar
@@ -51,6 +52,8 @@ class MeetingActionBar extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           // Teacher/Principal Leave/End Button
+
+
           Consumer<RoleProvider>(
             builder: (context, roleProvider, child) {
               if (roleProvider.isTeacher || roleProvider.isPrincipal) {
@@ -71,50 +74,39 @@ class MeetingActionBar extends StatelessWidget {
                       color: Colors.white,
                     ),
                   ),
-                  offset: const Offset(0, -185),
+                  offset: const Offset(0, -125),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                   onSelected: (value) async {
-                    // Update inmeeting status to false for this participant
+                    // Update inmeeting status to false for this participant.
                     try {
                       await FirebaseFirestore.instance
                           .collection('meeting_record')
                           .doc(meeting.id)
                           .collection('Stats')
-                          .doc(participantId) // Use the participant ID of the teacher/principal
+                          .doc(participantId) // teacher/principal id
                           .update({'inmeeting': false});
                     } catch (e) {
                       print("Error updating inmeeting status: $e");
                     }
 
-                    if (value == "leave") {
-                      onCallLeaveButtonPressed();
-                    } else if (value == "end") {
+                    // Only "end" is available now
+                    if (value == "end") {
+                      if (roleProvider.isPrincipal) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (context) =>
+                              SplashScreen()),
+                        );
+                      }
                       onCallEndButtonPressed();
                     }
 
-                    // Navigate based on role after leaving or ending
-                    if (roleProvider.isTeacher) {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (context) => SplashScreen()),
-                      );
-                    } else if (roleProvider.isPrincipal) {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (context) => TeacherScreen()),
-                      );
-                    }
+                    // Navigate based on role after ending.
+
                   },
                   itemBuilder: (context) => <PopupMenuEntry>[
-                    _buildMeetingPoupItem(
-                      "leave",
-                      "Leave",
-                      "Only you will leave the call",
-                      SvgPicture.asset("assets/ic_leave.svg"),
-                    ),
-                    const PopupMenuDivider(),
                     _buildMeetingPoupItem(
                       "end",
                       "End",
@@ -128,10 +120,13 @@ class MeetingActionBar extends StatelessWidget {
               }
             },
           ),
+
+
+
           // Student Leave Button
           Consumer<RoleProvider>(
             builder: (context, roleProvider, child) {
-              if (roleProvider.isStudent ) {
+              if (roleProvider.isStudent) {
                 return ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.red,
@@ -232,7 +227,8 @@ class MeetingActionBar extends StatelessWidget {
                   ),
                   onSelected: (value) =>
                   {onMoreOptionSelected(value.toString())},
-                  itemBuilder: (context) => <PopupMenuEntry>[
+                  itemBuilder: (context) =>
+                  <PopupMenuEntry>[
                     _buildMeetingPoupItem(
                       "recording",
                       recordingState == "RECORDING_STARTED"
@@ -271,8 +267,8 @@ class MeetingActionBar extends StatelessWidget {
     );
   }
 
-  PopupMenuItem<dynamic> _buildMeetingPoupItem(
-      String value, String title, String? description, Widget leadingIcon) {
+  PopupMenuItem<dynamic> _buildMeetingPoupItem(String value, String title,
+      String? description, Widget leadingIcon) {
     return PopupMenuItem(
       value: value,
       padding: const EdgeInsets.fromLTRB(16, 0, 0, 0),
@@ -305,4 +301,5 @@ class MeetingActionBar extends StatelessWidget {
       ),
     );
   }
+
 }

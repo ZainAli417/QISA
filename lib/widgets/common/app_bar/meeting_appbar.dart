@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -41,10 +42,53 @@ class MeetingAppBarState extends State<MeetingAppBar>
     super.initState();
     fetchTeachers(widget.meeting.id); // Fetch teachers asynchronously
     fetchVideoDevices();
+    // Fetch the assigned teacher for this room from the database.
+    _fetchAssignedTeacherFromDB();
     // Auto-trigger savedata only if the user is a principal
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _autoSaveInitialData();
     });
+  }
+  // Inside MeetingAppBarState (or in MeetingAppBarLogic)
+  Future<String?> getAssignedTeacher(String meetingId) async {
+    try {
+      // Retrieve the document from the "meeting_record" collection.
+      final doc = await FirebaseFirestore.instance
+          .collection('meeting_record')
+          .doc(meetingId)
+          .get();
+
+      if (doc.exists) {
+        // Extract the "assignedTo" field from the document.
+        return (doc.data()?['assigned_to '] as String?) ?? "";
+      }
+    } catch (error) {
+      // Handle errors if needed.
+      debugPrint("Error retrieving assigned teacher: $error");
+    }
+    return "";
+  }
+
+// Fetch the assigned teacher for the room from the database.
+  void _fetchAssignedTeacherFromDB() async {
+    final assignedTeacher = await getAssignedTeacher(widget.meeting.id); // Your DB fetching method.
+    if (assignedTeacher != null && assignedTeacher.isNotEmpty) {
+      setState(() {
+        selectedTeacher = assignedTeacher;
+      });
+    }
+  }
+  void _autoSaveInitialData() {
+    final roleProvider = Provider.of<RoleProvider>(context, listen: false);
+    if (!roleProvider.isPrincipal) return; // Only proceed if principal
+
+    // Only auto-assign if no teacher is already fetched from DB.
+    if ((selectedTeacher == null || selectedTeacher!.isEmpty) && teacherList.isNotEmpty) {
+      setState(() {
+        selectedTeacher = teacherList[0]; // Set the selected teacher if available.
+      });
+    }
+    savedata(selectedTeacher, widget.meeting.id); // Save the data (null if no teachers available)
   }
 
   void fetchVideoDevices() async {
@@ -52,20 +96,7 @@ class MeetingAppBarState extends State<MeetingAppBar>
     setState(() {});
   }
 
-  // Handle initial auto-save only for principal
-  void _autoSaveInitialData() {
-    final roleProvider = Provider.of<RoleProvider>(context, listen: false);
-    if (!roleProvider.isPrincipal) return; // Only proceed if principal
 
-    // Use the first teacher if list is populated; otherwise, save with null (Unassigned in savedata)
-    final initialTeacher = teacherList.isNotEmpty ? teacherList[0] : null;
-    if (teacherList.isNotEmpty) {
-      setState(() {
-        selectedTeacher = initialTeacher; // Set the selected teacher if available
-      });
-    }
-    savedata(initialTeacher, widget.meeting.id); // Save the data (null if no teachers available)
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,28 +111,7 @@ class MeetingAppBarState extends State<MeetingAppBar>
         child: Row(
           children: [
             // Back button.
-            IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () {
-                final roleProvider =
-                Provider.of<RoleProvider>(context, listen: false);
-                Navigator.pop(context);
-                widget.meeting.leave();
 
-                // Navigate based on role.
-                if (roleProvider.isPrincipal) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => TeacherScreen()),
-                  );
-                } else {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => SplashScreen()),
-                  );
-                }
-              },
-            ),
             if (widget.recordingState == "RECORDING_STARTING" ||
                 widget.recordingState == "RECORDING_STOPPING" ||
                 widget.recordingState == "RECORDING_STARTED")
@@ -152,13 +162,16 @@ class MeetingAppBarState extends State<MeetingAppBar>
                       children: [
                         DropdownButtonFormField<String>(
                           value: selectedTeacher,
-                          hint: Text(
+                          hint: selectedTeacher == null || selectedTeacher!.isEmpty
+                              ? Text(
                             "Assign Meeting",
                             style: GoogleFonts.poppins(
                                 fontSize: 12,
                                 color: Colors.white,
                                 fontWeight: FontWeight.w600),
-                          ),
+                          )
+                              : null,
+
                           icon: const Icon(Icons.arrow_drop_down,
                               color: Colors.white),
                           dropdownColor: Colors.black87,
