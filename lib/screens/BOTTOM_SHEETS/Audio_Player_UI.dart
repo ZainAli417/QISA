@@ -31,22 +31,21 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
 
   Future<void> _initAudioPlayer() async {
     try {
-      // setUrl returns the duration if available.
       await _audioPlayer.setUrl(widget.audioUrl);
-      setState(() {}); // Refresh to update slider if duration is loaded.
+      setState(() {});
     } catch (e) {
-      print("Error loading audio source: $e");
+      debugPrint("Error loading audio source: $e");
     }
   }
 
   @override
   void didUpdateWidget(covariant AudioPlayerWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // If the audio URL changes, reload the audio.
+    // If URL changes, reload audio.
     if (widget.audioUrl != oldWidget.audioUrl) {
       _initAudioPlayer();
     }
-    // Only trigger play/pause if the playing state has changed.
+    // Trigger play/pause if playing state has changed.
     if (widget.isPlaying != oldWidget.isPlaying) {
       _handlePlayPause();
     }
@@ -57,9 +56,8 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
       _audioPlayer.play();
     } else {
       _audioPlayer.pause();
-      _audioPlayer.seek(Duration.zero); // optional: reset position on stop
+      //_audioPlayer.seek(Duration.zero); // Optionally reset position on stop.
     }
-
   }
 
   @override
@@ -69,39 +67,30 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
   }
 
   String _formatDuration(Duration duration) {
-    final minutes =
-    duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds =
-    duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
     return "$minutes:$seconds";
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return AnimatedContainer( // Bonus UI animation on selection.
+      duration: const Duration(milliseconds: 300),
       decoration: BoxDecoration(
-        color: Colors.white, // Background color.
-        borderRadius: BorderRadius.circular(25), // Rounded corners.
-        border: Border.all(
-          color: Colors.grey.shade400, // Border color.
-          width: 2, // Border width.
-        ),
+        color: widget.isPlaying ? Colors.green.withOpacity(0.2) : Colors.transparent,
+        borderRadius: BorderRadius.circular(25),
+        border: Border.all(color: Colors.grey.shade400, width: 2),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Row(
         children: [
           IconButton(
             icon: Icon(
-              widget.isPlaying
-                  ? Icons.pause_circle_outline
-                  : Icons.play_arrow_outlined,
+              widget.isPlaying ? Icons.pause_circle_outline : Icons.play_arrow_outlined,
               color: widget.isPlaying ? Colors.green : Colors.red,
               size: 30,
             ),
-            onPressed: () {
-              // Call parent's callback to update the playing state.
-              widget.onPlay();
-            },
+            onPressed: widget.onPlay,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
           ),
@@ -110,15 +99,12 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
               stream: _audioPlayer.positionStream,
               builder: (context, snapshot) {
                 final currentPosition = snapshot.data ?? Duration.zero;
-                final totalDuration =
-                    _audioPlayer.duration ?? Duration.zero;
-                // Show slider only when total duration is greater than zero.
+                final totalDuration = _audioPlayer.duration ?? Duration.zero;
                 return totalDuration.inSeconds > 0
                     ? SliderTheme(
                   data: const SliderThemeData(
                     trackHeight: 5,
-                    thumbShape:
-                    RoundSliderThumbShape(enabledThumbRadius: 6),
+                    thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6),
                   ),
                   child: Slider(
                     value: currentPosition.inSeconds.toDouble(),
@@ -127,8 +113,7 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
                     activeColor: Colors.black,
                     inactiveColor: Colors.black12,
                     onChanged: (value) async {
-                      await _audioPlayer
-                          .seek(Duration(seconds: value.toInt()));
+                      await _audioPlayer.seek(Duration(seconds: value.toInt()));
                     },
                   ),
                 )
@@ -146,8 +131,7 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
               setState(() {
                 _isLooping = !_isLooping;
               });
-              await _audioPlayer.setLoopMode(
-                  _isLooping ? LoopMode.one : LoopMode.off);
+              await _audioPlayer.setLoopMode(_isLooping ? LoopMode.one : LoopMode.off);
             },
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -156,18 +140,13 @@ class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
             stream: _audioPlayer.positionStream,
             builder: (context, snapshot) {
               final currentPosition = snapshot.data ?? Duration.zero;
-              final totalDuration =
-                  _audioPlayer.duration ?? Duration.zero;
+              final totalDuration = _audioPlayer.duration ?? Duration.zero;
               final remainingTime = totalDuration - currentPosition;
               return Padding(
                 padding: const EdgeInsets.only(left: 8),
                 child: Text(
                   _formatDuration(remainingTime),
-                  style: GoogleFonts.poppins(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black,
-                  ),
+                  style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.black),
                 ),
               );
             },

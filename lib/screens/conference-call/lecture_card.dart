@@ -3,7 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../constants/colors.dart' ;
-import '../Quiz and Audio/Audio_Player_UI.dart';
+import '../BOTTOM_SHEETS/Audio_Player_UI.dart';
 
 class LectureAudioCard extends StatelessWidget {
   final String title;

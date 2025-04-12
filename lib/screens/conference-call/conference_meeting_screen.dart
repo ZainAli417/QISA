@@ -25,17 +25,14 @@ import 'package:videosdk_flutter_example/widgets/common/joining/waiting_to_join.
 import 'package:videosdk_flutter_example/widgets/common/meeting_controls/meeting_action_bar.dart';
 import 'package:videosdk_flutter_example/widgets/common/participant/participant_list.dart';
 import 'package:videosdk_flutter_example/widgets/conference-call/conference_participant_grid.dart';
-import 'package:videosdk_flutter_example/widgets/conference-call/conference_screenshare_view.dart';
 import 'package:firebase_database/firebase_database.dart';
-
 import '../../providers/meeting_provider.dart';
 import '../../providers/principal_provider.dart';
 import '../../providers/role_provider.dart';
-import '../../providers/teacher_provider.dart';
-import '../../providers/topic_provider.dart';
-import '../../utils/api.dart';
-import '../Quiz and Audio/Audio_Player_UI.dart';
-import '../Quiz and Audio/Quiz_Widget.dart';
+import '../BOTTOM_SHEETS/Audio_Bottom.dart';
+import '../BOTTOM_SHEETS/Audio_Player_UI.dart';
+import '../BOTTOM_SHEETS/Quiz_Widget.dart';
+import '../BOTTOM_SHEETS/Study_Material.dart';
 
 class ConferenceMeetingScreen extends StatefulWidget {
   final String meetingId, token, displayName;
@@ -528,26 +525,29 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                     List<Widget> buttons = [];
 
                     // Teacher: Show only "Lectures"
-                    if (roleProvider.isTeacher) {
+                   if (roleProvider.isTeacher || roleProvider.isStudent) {
                       buttons.add(
                         _buildActionButton(
                           context: context,
                           icon: Icons.book,
                           label: 'Lectures',
-                          onPressed: () => Lecture_button_Conditional_Trigger(context),
+                          onPressed: () {
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.transparent,
+                              builder: (_) => RoomAudioVideoBottomSheet(roomId: widget.meetingId),
+                            );
+                          },
                         ),
                       );
                     }
 
+
+
                     // Student: Show "Lectures" + "Quiz"
                     if (roleProvider.isStudent) {
                       buttons.addAll([
-                        _buildActionButton(
-                          context: context,
-                          icon: Icons.book,
-                          label: 'Lectures',
-                          onPressed: () => Lecture_button_Conditional_Trigger(context),
-                        ),
                         _buildActionButton(
                           context: context,
                           icon: Icons.quiz,
@@ -563,8 +563,14 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
                         _buildActionButton(
                           context: context,
                           icon: Icons.book,
-                          label: 'Lectures',
-                          onPressed: () => Lecture_button_Conditional_Trigger(context),
+                          label: 'Assign Study Material',
+                      onPressed: () => showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (context) => StudyMaterialBottomSheet(roomId:widget.meetingId),
+                    ),
+
                         ),
                         _buildActionButton(
                           context: context,
@@ -898,7 +904,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
     );
   }
 
-  void Lecture_button_Conditional_Trigger(BuildContext context) {
+  /*void Lecture_button_Conditional_Trigger(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -911,7 +917,7 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
     );
   }
 
-
+   */
 
 
 
@@ -1174,7 +1180,6 @@ class _ConferenceMeetingScreenState extends State<ConferenceMeetingScreen> {
   void dispose() {
     _timer?.cancel(); // cancel teacher timer if any
     _remainingTimeSubscription?.cancel(); // stop listening to Firebase
-    super.dispose();
     _broadcastSubscription
         ?.cancel(); // Stop the listener when the widget is disposed
     _audioFilesSubscription

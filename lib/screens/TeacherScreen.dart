@@ -22,8 +22,7 @@ import 'package:videosdk_flutter_example/screens/conference-call/conference_meet
 import '../constants/QrCode.dart';
 import '../providers/teacher_provider.dart';
 import '../providers/topic_provider.dart';
-import 'Quiz and Audio/Broadcast_Screen.dart';
-import 'Quiz and Audio/Audio_Player_UI.dart';
+import 'BOTTOM_SHEETS/Broadcast_Screen.dart';
 import 'common/join_screen.dart';
 // Define a tuple type if needed (or you can use a package like "tuple")
 class Tuple2<A, B> {

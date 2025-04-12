@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:responsive_framework/breakpoint.dart';
 import 'package:responsive_framework/responsive_breakpoints.dart';
+import 'package:videosdk_flutter_example/providers/audio_playback.dart';
 import 'package:videosdk_flutter_example/providers/meeting_provider.dart';
 import 'package:videosdk_flutter_example/providers/principal_provider.dart';
 import 'package:videosdk_flutter_example/providers/profile_provider.dart';
@@ -63,6 +64,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => PrincipalProvider()),
         ChangeNotifierProvider(create: (_) => CreateTopicProvider()),
         ChangeNotifierProvider(create: (_) => MeetingState()),
+        ChangeNotifierProvider(create: (_) => AudioPlaybackProvider()),
 
         ChangeNotifierProvider(create: (_) => RoleProvider()),
 

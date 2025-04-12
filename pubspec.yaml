@@ -48,6 +48,7 @@ dependencies:
   rxdart: ^0.28.0
   pdf: ^3.11.3
   printing: ^5.14.2
+  video_player: ^2.9.5
 
 
 
